@@ -1,7 +1,18 @@
-require("dotenv").config();
+const path = require("path");
+// Load server/.env no matter which folder the server is started from
+require("dotenv").config({ path: path.join(__dirname, ".env") });
 const express = require("express");
 const cors = require("cors");
 const { createClient } = require("@supabase/supabase-js");
+
+const missing = ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"].filter((k) => !process.env[k]);
+if (missing.length) {
+  console.error(`Missing ${missing.join(", ")}. Copy server/.env.example to server/.env and fill it in.`);
+  process.exit(1);
+}
+if (!process.env.GEMINI_API_KEY) {
+  console.warn("GEMINI_API_KEY is not set: /api/ai will fail until you add it to server/.env.");
+}
 
 const app = express();
 const PORT = process.env.PORT || 3000;

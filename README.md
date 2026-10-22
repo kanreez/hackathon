@@ -1,8 +1,8 @@
-# Welcome to your Expo app 👋
+# Hackathon boilerplate
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Expo (Router, NativeWind) + Supabase auth + a small Node/Express backend for AI calls.
 
-## Get started
+## Setup
 
 1. Install dependencies
 
@@ -10,47 +10,37 @@ This is an [Expo](https://expo.dev) project created with [`create-expo-app`](htt
    npm install
    ```
 
-2. Start the app
+2. App env: copy `.env.example` to `.env` in the project root and fill in the Supabase URL and publishable key.
 
-   ```bash
-   npx expo start
-   ```
+3. Backend env (only needed for AI / `/api/*`): copy `server/.env.example` to `server/.env` and fill in the Supabase URL, the secret key and a Gemini key. Get the secret key privately, never through git.
 
-In the output, you'll find options to open the app in a
+## Run
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **src/app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+Two terminals, both in the project root:
 
 ```bash
-npm run reset-project
+npm run server          # backend on port 3000
+npx expo start -c       # app (press w for web, or scan the QR code with Expo Go)
 ```
 
-This command will move the starter code to the **example** directory and create a blank **src/app** directory where you can start developing.
+- The app finds the backend on your PC automatically in development, also from a real phone on the same Wi-Fi. If Windows asks whether Node may use the network, allow it on private networks.
+- After editing `.env`, always restart with `npx expo start -c`.
+- Install packages with `npx expo install <package>`, not `npm install <package>`, so versions match the Expo SDK.
 
-### Other setup steps
+## Structure
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+```
+src/app/          screens (file-based routing): (auth) login/register, (tabs) home/explore/profile/settings
+src/components/   Button, Card, Input, ScreenWrapper
+src/constants/    theme.ts (colors, spacing, typography), mockData.ts
+src/context/      AuthContext (useAuth: user, login, signup, logout)
+src/services/     supabase.ts, api.ts (calls the backend with the user's token), userService.ts (profiles), storage.ts (image upload)
+src/utils/        ai.ts (askAI), location.ts, media.ts (pick/take photo)
+server/           server.js: /api/me, /api/ai (Gemini)
+```
 
-## Learn more
+## Supabase checklist
 
-To learn more about developing your project with Expo, look at the following resources:
-
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+- `profiles` table exists (used by `userService.ts` and `/api/me`).
+- Storage bucket `images` exists (used by `storage.ts`); make it public for public URLs.
+- For the demo: turn off "Confirm email" (Authentication → Sign In / Providers → Email) and create a demo account.

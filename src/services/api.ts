@@ -1,6 +1,12 @@
+import Constants from "expo-constants";
 import { supabase } from "./supabase";
 
-const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:3000";
+// In dev, Expo's hostUri is your PC's address as the phone sees it (e.g. "192.168.1.50:8081"),
+// so the backend on the same PC is reachable from a real phone without editing anything.
+// Set EXPO_PUBLIC_API_URL to override (e.g. a deployed backend).
+const devHost = Constants.expoConfig?.hostUri?.split(":")[0];
+const BASE_URL =
+  process.env.EXPO_PUBLIC_API_URL || (devHost ? `http://${devHost}:3000` : "http://localhost:3000");
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const { data } = await supabase.auth.getSession();
