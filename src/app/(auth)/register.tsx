@@ -1,9 +1,12 @@
 import { Link } from "expo-router";
 import { useState } from "react";
 import { Text, View } from "react-native";
+import { BrandMark } from "../../components/BrandMark";
 import { Button } from "../../components/Button";
 import { Input } from "../../components/Input";
 import { ScreenWrapper } from "../../components/ScreenWrapper";
+import { authStyles as styles } from "../../constants/authStyles";
+import { colors, typography } from "../../constants/theme";
 import { useAuth } from "../../context/AuthContext";
 
 export default function Register() {
@@ -31,18 +34,42 @@ export default function Register() {
   };
 
   return (
-    <ScreenWrapper>
-      <View style={{ flex: 1, justifyContent: "center", gap: 12 }}>
-        <Text style={{ fontSize: 32, fontWeight: "700", marginBottom: 16 }}>Register</Text>
-        <Input label="Full name" placeholder="Full name" value={fullName} onChangeText={setFullName} />
-        <Input label="Email" placeholder="Email" autoCapitalize="none" keyboardType="email-address" value={email} onChangeText={setEmail} />
-        <Input label="Password" placeholder="Password" secureTextEntry value={password} onChangeText={setPassword} error={error} />
-        <Button title="Create Account" loading={loading} onPress={onSubmit} />
-        {info ? <Text style={{ textAlign: "center", color: "#16a34a" }}>{info}</Text> : null}
-        <Link href="/login" style={{ textAlign: "center", color: "#2563eb" }}>
-          Have an account? Login
-        </Link>
+    <ScreenWrapper scroll style={styles.page}>
+      <BrandMark />
+      <View style={styles.intro}>
+        <Text style={styles.title}>Create your account</Text>
+        <Text style={styles.subtitle}>It takes less than a minute.</Text>
       </View>
+      <View style={styles.form}>
+        <Input label="Full name" placeholder="Maria Ivanova" autoComplete="name" value={fullName} onChangeText={setFullName} />
+        <Input
+          label="Email"
+          placeholder="you@example.com"
+          autoCapitalize="none"
+          autoComplete="email"
+          keyboardType="email-address"
+          value={email}
+          onChangeText={setEmail}
+        />
+        <Input
+          label="Password"
+          placeholder="At least 6 characters"
+          secureTextEntry
+          autoComplete="new-password"
+          value={password}
+          onChangeText={setPassword}
+          onSubmitEditing={onSubmit}
+          error={error}
+        />
+        <Button title="Create account" loading={loading} onPress={onSubmit} style={styles.submit} />
+        {info ? <Text style={{ ...typography.label, color: colors.success }}>{info}</Text> : null}
+      </View>
+      <Text style={styles.footer}>
+        Already have an account?{" "}
+        <Link href="/login" style={styles.link}>
+          Log in
+        </Link>
+      </Text>
     </ScreenWrapper>
   );
 }

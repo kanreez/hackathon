@@ -1,9 +1,11 @@
 import { Link } from "expo-router";
 import { useState } from "react";
 import { Text, View } from "react-native";
+import { BrandMark } from "../../components/BrandMark";
 import { Button } from "../../components/Button";
 import { Input } from "../../components/Input";
 import { ScreenWrapper } from "../../components/ScreenWrapper";
+import { authStyles as styles } from "../../constants/authStyles";
 import { useAuth } from "../../context/AuthContext";
 
 export default function Login() {
@@ -26,16 +28,40 @@ export default function Login() {
   };
 
   return (
-    <ScreenWrapper>
-      <View style={{ flex: 1, justifyContent: "center", gap: 12 }}>
-        <Text style={{ fontSize: 32, fontWeight: "700", marginBottom: 16 }}>Login</Text>
-        <Input label="Email" placeholder="Email" autoCapitalize="none" keyboardType="email-address" value={email} onChangeText={setEmail} />
-        <Input label="Password" placeholder="Password" secureTextEntry value={password} onChangeText={setPassword} error={error} />
-        <Button title="Sign In" loading={loading} onPress={onSubmit} />
-        <Link href="/register" style={{ textAlign: "center", color: "#2563eb" }}>
-          No account? Register
-        </Link>
+    <ScreenWrapper scroll style={styles.page}>
+      <BrandMark />
+      <View style={styles.intro}>
+        <Text style={styles.title}>Welcome back</Text>
+        <Text style={styles.subtitle}>Log in to pick up where you left off.</Text>
       </View>
+      <View style={styles.form}>
+        <Input
+          label="Email"
+          placeholder="you@example.com"
+          autoCapitalize="none"
+          autoComplete="email"
+          keyboardType="email-address"
+          value={email}
+          onChangeText={setEmail}
+        />
+        <Input
+          label="Password"
+          placeholder="Your password"
+          secureTextEntry
+          autoComplete="password"
+          value={password}
+          onChangeText={setPassword}
+          onSubmitEditing={onSubmit}
+          error={error}
+        />
+        <Button title="Log in" loading={loading} onPress={onSubmit} style={styles.submit} />
+      </View>
+      <Text style={styles.footer}>
+        New here?{" "}
+        <Link href="/register" style={styles.link}>
+          Create an account
+        </Link>
+      </Text>
     </ScreenWrapper>
   );
 }

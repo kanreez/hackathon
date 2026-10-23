@@ -1,7 +1,25 @@
-import { StyleSheet, View, ViewProps } from "react-native";
+import { Pressable, StyleProp, StyleSheet, View, ViewProps, ViewStyle } from "react-native";
 import { colors, radius, spacing } from "../constants/theme";
 
-export function Card({ style, children, ...rest }: ViewProps) {
+type Props = ViewProps & {
+  onPress?: () => void;
+  style?: StyleProp<ViewStyle>;
+};
+
+// Flat white surface. Pass onPress to make it tappable.
+export function Card({ style, children, onPress, ...rest }: Props) {
+  if (onPress) {
+    return (
+      <Pressable
+        accessibilityRole="button"
+        onPress={onPress}
+        style={({ pressed }) => [styles.card, pressed && styles.pressed, style]}
+        {...rest}
+      >
+        {children}
+      </Pressable>
+    );
+  }
   return (
     <View style={[styles.card, style]} {...rest}>
       {children}
@@ -14,12 +32,6 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     borderRadius: radius.lg,
     backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    shadowColor: "#000",
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
   },
+  pressed: { opacity: 0.8 },
 });
