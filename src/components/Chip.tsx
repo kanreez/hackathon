@@ -21,7 +21,7 @@ export function Chip({ label, selected = false, onPress, icon }: ChipProps) {
       style={({ pressed }) => [
         styles.chip,
         { backgroundColor: selected ? colors.accent : colors.surface, borderColor: selected ? colors.accent : colors.border },
-        pressed && { transform: [{ scale: 0.97 }] },
+        pressed && { transform: [{ scale: 0.96 }] },
       ]}
     >
       {icon ? <Ionicons name={icon} size={14} color={fg} /> : null}

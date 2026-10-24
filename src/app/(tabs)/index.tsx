@@ -122,7 +122,7 @@ export default function Find() {
                 accessibilityRole="button"
                 accessibilityLabel={`Try: ${q}`}
                 onPress={() => search(q)}
-                style={({ pressed }) => [styles.example, pressed && { transform: [{ scale: 0.97 }] }]}
+                style={({ pressed }) => [styles.example, pressed && { transform: [{ scale: 0.96 }] }]}
               >
                 <Text style={styles.exampleText} numberOfLines={1}>
                   {q}

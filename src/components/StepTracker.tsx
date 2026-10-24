@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Fragment } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { colors, typography } from "../constants/theme";
+import { colors, spacing, typography } from "../constants/theme";
 
 const STEPS = ["Find", "Book", "Open"];
 
@@ -22,7 +22,7 @@ export function StepTracker({ active, steps = STEPS }: { active: number; steps?:
             <View style={styles.step}>
               <View style={[styles.dot, done && styles.dotDone, current && styles.dotCurrent]}>
                 {done ? (
-                  <Ionicons name="checkmark" size={14} color={colors.onInk} />
+                  <Ionicons name="checkmark" size={12} color={colors.onInk} />
                 ) : (
                   <Text style={[styles.num, current && { color: colors.onAccent }]}>{i + 1}</Text>
                 )}
@@ -37,20 +37,21 @@ export function StepTracker({ active, steps = STEPS }: { active: number; steps?:
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: "row", alignItems: "center", marginBottom: 20 },
+  // Quieter than the content: small dots, caption labels, hairline connectors
+  row: { flexDirection: "row", alignItems: "center", marginBottom: spacing.lg },
   step: { flexDirection: "row", alignItems: "center", gap: 6 },
   dot: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: colors.sand,
   },
-  dotDone: { backgroundColor: colors.ink },
+  dotDone: { backgroundColor: colors.textMuted },
   dotCurrent: { backgroundColor: colors.accent },
-  num: { ...typography.label, fontSize: 12, color: colors.textMuted },
-  label: { ...typography.label, color: colors.textMuted },
-  line: { flex: 1, height: 2, borderRadius: 1, marginHorizontal: 10, backgroundColor: colors.border },
-  lineDone: { backgroundColor: colors.ink },
+  num: { ...typography.caption, fontSize: 11, lineHeight: 14, color: colors.textMuted, ...typography.tabular },
+  label: { ...typography.caption, color: colors.textMuted },
+  line: { flex: 1, height: 1, marginHorizontal: 10, backgroundColor: colors.border },
+  lineDone: { backgroundColor: colors.textMuted },
 });

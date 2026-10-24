@@ -1,10 +1,11 @@
 import {
-  Montserrat_400Regular,
-  Montserrat_500Medium,
-  Montserrat_600SemiBold,
-  Montserrat_800ExtraBold,
+  Overpass_400Regular,
+  Overpass_500Medium,
+  Overpass_600SemiBold,
+  Overpass_700Bold,
+  Overpass_800ExtraBold,
   useFonts,
-} from "@expo-google-fonts/montserrat";
+} from "@expo-google-fonts/overpass";
 import { Stack, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
@@ -51,10 +52,11 @@ function RootNavigator() {
 
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({
-    Montserrat_400Regular,
-    Montserrat_500Medium,
-    Montserrat_600SemiBold,
-    Montserrat_800ExtraBold,
+    Overpass_400Regular,
+    Overpass_500Medium,
+    Overpass_600SemiBold,
+    Overpass_700Bold,
+    Overpass_800ExtraBold,
   });
 
   useEffect(() => {

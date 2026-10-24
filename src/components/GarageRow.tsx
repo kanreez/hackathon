@@ -55,7 +55,7 @@ export function GarageRow({ garage: g, distanceKm, onPress }: Props) {
           accessibilityRole="button"
           accessibilityLabel={`${g.title}, ${formatMoney(g.price_hour)} per hour`}
           onPress={onPress}
-          style={({ pressed }) => [styles.info, pressed && { transform: [{ scale: 0.98 }] }]}
+          style={({ pressed }) => [styles.info, pressed && { opacity: 0.75 }]}
         >
           {info}
         </Pressable>

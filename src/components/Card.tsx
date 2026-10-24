@@ -6,7 +6,7 @@ type Props = ViewProps & {
   style?: StyleProp<ViewStyle>;
 };
 
-// Warm surface with a soft shadow. Pass onPress to make it tappable.
+// Concrete surface, flat. Pass onPress to make it tappable.
 export function Card({ style, children, onPress, ...rest }: Props) {
   if (onPress) {
     return (
@@ -34,5 +34,5 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     ...shadow.card,
   },
-  pressed: { transform: [{ scale: 0.98 }] },
+  pressed: { opacity: 0.85 },
 });

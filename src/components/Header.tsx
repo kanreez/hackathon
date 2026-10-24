@@ -52,7 +52,7 @@ export function IconButton({ icon, label, onPress, tone = "plain" }: IconButtonP
         styles.iconBtn,
         { backgroundColor: solid ? colors.ink : colors.surface },
         !solid && shadow.card,
-        pressed && { transform: [{ scale: 0.94 }] },
+        pressed && { transform: [{ scale: 0.96 }] },
       ]}
     >
       <Ionicons name={icon} size={20} color={solid ? colors.onInk : colors.ink} />

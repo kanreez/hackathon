@@ -73,7 +73,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
           <Ionicons
             name={icons[toast.type]}
             size={20}
-            color={toast.type === "success" ? colors.accent : toast.type === "error" ? colors.white : colors.ink}
+            color={toast.type === "success" ? colors.success : toast.type === "error" ? colors.white : colors.ink}
           />
           <Text style={[styles.text, toast.type === "error" && { color: colors.white }]}>{toast.message}</Text>
         </Animated.View>

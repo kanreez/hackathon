@@ -15,12 +15,12 @@ type IconTileProps = {
   style?: StyleProp<ViewStyle>;
 };
 
-// Orange and amber fills always take dark icons
-const ON_ORANGE: string[] = [colors.accent, colors.cta];
+// Sign blue takes white icons, line yellow takes dark ones
+const ICON_ON: Record<string, string> = { [colors.accent]: colors.onAccent, [colors.cta]: colors.onCta };
 
 // Rounded-square tile holding an icon
 export function IconTile({ icon, size = 44, bg = colors.sand, color, style }: IconTileProps) {
-  const fg = color ?? (ON_ORANGE.includes(bg) ? colors.onAccent : colors.ink);
+  const fg = color ?? ICON_ON[bg] ?? colors.ink;
   return (
     <View
       style={[
@@ -48,14 +48,14 @@ export function RowAction({ icon, label, onPress }: { icon: IconName; label: str
       accessibilityRole="button"
       accessibilityLabel={label}
       onPress={onPress}
-      style={({ pressed }) => [styles.rowAction, pressed && { transform: [{ scale: 0.94 }] }]}
+      style={({ pressed }) => [styles.rowAction, pressed && { transform: [{ scale: 0.96 }] }]}
     >
       <Ionicons name={icon} size={20} color={colors.ink} />
     </Pressable>
   );
 }
 
-// 28px orange badges with dark numbers
+// 28px blue badges with white numbers
 export function NumberedSteps({ steps }: { steps: string[] }) {
   return (
     <View style={styles.steps}>
@@ -126,11 +126,15 @@ export function Headline({ title, subline, style }: { title: string; subline?: s
   );
 }
 
-// The orange logo tile: 40px in headers, 64px on the auth screens
+// The logo: a white P on sign blue, like the parking sign. 40px in headers, 64px on auth.
 export function LogoTile({ size = 40 }: { size?: number }) {
   return (
-    <View style={[styles.tile, { width: size, height: size, borderRadius: Math.round(size * 0.3), backgroundColor: colors.accent }]}>
-      <Ionicons name="car" size={Math.round(size * 0.5)} color={colors.white} />
+    <View
+      style={[styles.tile, { width: size, height: size, borderRadius: Math.round(size * 0.22), backgroundColor: colors.accent }]}
+      accessibilityElementsHidden
+      importantForAccessibility="no"
+    >
+      <Text style={[styles.logoP, { fontSize: Math.round(size * 0.66), lineHeight: Math.round(size * 0.8) }]}>P</Text>
     </View>
   );
 }
@@ -195,5 +199,6 @@ const styles = StyleSheet.create({
   section: { ...typography.h2, color: colors.ink, marginTop: spacing.xl, marginBottom: spacing.md },
   headline: { gap: spacing.sm },
   display: { ...typography.display, color: colors.ink },
-  subline: { ...typography.subline, color: colors.accentDeep },
+  subline: { ...typography.subline, color: colors.textMuted },
+  logoP: { fontFamily: typography.display.fontFamily, color: colors.white, includeFontPadding: false },
 });

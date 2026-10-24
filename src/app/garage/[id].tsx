@@ -369,7 +369,7 @@ function StepButton({ icon, label, onPress, disabled }: { icon: IconName; label:
       accessibilityState={{ disabled }}
       disabled={disabled}
       onPress={onPress}
-      style={({ pressed }) => [styles.stepBtn, disabled && { opacity: 0.35 }, pressed && { transform: [{ scale: 0.92 }] }]}
+      style={({ pressed }) => [styles.stepBtn, disabled && { opacity: 0.35 }, pressed && { transform: [{ scale: 0.96 }] }]}
     >
       <Ionicons name={icon} size={20} color={colors.ink} />
     </Pressable>

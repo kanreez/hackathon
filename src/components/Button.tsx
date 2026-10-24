@@ -3,7 +3,7 @@ import { ComponentProps } from "react";
 import { ActivityIndicator, Pressable, PressableProps, StyleSheet, Text } from "react-native";
 import { colors, radius, shadow, spacing, typography } from "../constants/theme";
 
-// accent = the amber step forward: one per screen
+// accent = the line-yellow step forward: one per screen
 type Variant = "primary" | "accent" | "secondary" | "ghost" | "danger";
 
 type Props = Omit<PressableProps, "children"> & {
@@ -16,7 +16,7 @@ type Props = Omit<PressableProps, "children"> & {
 
 const palette: Record<Variant, { bg: string; fg: string; pressed: string }> = {
   primary: { bg: colors.ink, fg: colors.onInk, pressed: colors.inkSoft },
-  accent: { bg: colors.cta, fg: colors.onAccent, pressed: colors.ctaPressed },
+  accent: { bg: colors.cta, fg: colors.onCta, pressed: colors.ctaPressed },
   secondary: { bg: colors.sand, fg: colors.ink, pressed: colors.border },
   ghost: { bg: "transparent", fg: colors.ink, pressed: colors.sand },
   danger: { bg: colors.errorSoft, fg: colors.errorText, pressed: colors.errorSoft },
@@ -32,8 +32,9 @@ export function Button({
   style,
   ...rest
 }: Props) {
-  const p = palette[variant];
   const isDisabled = disabled || loading;
+  // A disabled yellow button would turn muddy; it shows as a quiet raised one instead
+  const p = variant === "accent" && disabled && !loading ? palette.secondary : palette[variant];
 
   return (
     <Pressable
@@ -46,7 +47,7 @@ export function Button({
         { backgroundColor: state.pressed ? p.pressed : p.bg },
         variant === "accent" && !isDisabled && shadow.glow,
         state.pressed && styles.pressed,
-        isDisabled && styles.disabled,
+        isDisabled && (variant === "accent" ? styles.disabledQuiet : styles.disabled),
         typeof style === "function" ? style(state) : style,
       ]}
       {...rest}
@@ -74,8 +75,9 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   sm: { minHeight: 44, paddingHorizontal: spacing.md },
-  pressed: { transform: [{ scale: 0.97 }] },
+  pressed: { transform: [{ scale: 0.96 }] },
   disabled: { opacity: 0.45 },
+  disabledQuiet: { opacity: 0.7 },
   text: { ...typography.label, fontSize: 16 },
   textSm: { fontSize: 14 },
 });
