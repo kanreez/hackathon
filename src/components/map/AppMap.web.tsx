@@ -22,15 +22,15 @@ const pillIcon = (label: string, selected: boolean) =>
     className: "",
     iconSize: [0, 0],
     iconAnchor: [0, 0],
-    html: `<div style="transform:translate(-50%,-115%);width:max-content;white-space:nowrap;padding:5px 10px;border-radius:999px;border:2px solid ${colors.white};box-shadow:0 4px 12px rgba(74,44,20,.25);cursor:pointer;font:600 13px/16px ${PIN_FONT};background:${selected ? colors.accent : colors.ink};color:${selected ? colors.ink : colors.white}">${escapeHtml(label)}</div>`,
+    html: `<div style="transform:translate(-50%,-115%);width:max-content;white-space:nowrap;padding:5px 10px;border-radius:999px;border:2px solid ${colors.white};box-shadow:0 4px 12px rgba(0,0,0,.45);cursor:pointer;font:600 13px/16px ${PIN_FONT};background:${selected ? colors.accent : colors.background};color:${selected ? colors.onAccent : colors.ink}">${escapeHtml(label)}</div>`,
   });
 
-// The garage's own pin: a tangerine drop with an ink dot
+// The garage's own pin: an orange drop with a dark dot
 const pickedIcon = L.divIcon({
   className: "",
   iconSize: [0, 0],
   iconAnchor: [0, 0],
-  html: `<div style="transform:translate(-50%,-100%);width:30px;height:30px;border-radius:50% 50% 50% 0;rotate:-45deg;translate:0 -4px;background:${colors.accent};border:3px solid ${colors.white};box-shadow:0 4px 12px rgba(74,44,20,.3);display:flex;align-items:center;justify-content:center"><div style="width:8px;height:8px;border-radius:50%;background:${colors.ink}"></div></div>`,
+  html: `<div style="transform:translate(-50%,-100%);width:30px;height:30px;border-radius:50% 50% 50% 0;rotate:-45deg;translate:0 -4px;background:${colors.accent};border:3px solid ${colors.white};box-shadow:0 4px 12px rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center"><div style="width:8px;height:8px;border-radius:50%;background:${colors.onAccent}"></div></div>`,
 });
 
 function escapeHtml(s: string) {

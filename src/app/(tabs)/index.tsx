@@ -1,20 +1,24 @@
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import { Platform, Pressable, StyleSheet, Text, View, ViewStyle } from "react-native";
-import { SectionTitle, StickerHeadline, Tag } from "../../components/Bits";
+import { Headline, SectionTitle, Tag } from "../../components/Bits";
+import { BrandMark } from "../../components/BrandMark";
 import { Button } from "../../components/Button";
 import { Card } from "../../components/Card";
 import { Chip } from "../../components/Chip";
+import { Glow } from "../../components/Glow";
 import { GarageRow } from "../../components/GarageRow";
+import { IconButton } from "../../components/Header";
 import { Input } from "../../components/Input";
 import { AppMap } from "../../components/map/AppMap";
 import { MapPin } from "../../components/map/types";
 import { ScreenWrapper } from "../../components/ScreenWrapper";
+import { Slab } from "../../components/Slab";
 import { EmptyState, ErrorState, Loading } from "../../components/StateViews";
 import { StepTracker } from "../../components/StepTracker";
 import { notify } from "../../components/Toast";
 import { AREA_CENTERS, EXAMPLE_QUERIES, SIZE_META } from "../../constants/garages";
-import { colors, radius, spacing, typography } from "../../constants/theme";
+import { colors, radius, shadow, spacing, typography } from "../../constants/theme";
 import { useAsync } from "../../hooks/useAsync";
 import { useIsWide } from "../../hooks/useIsWide";
 import { listGarages, searchGarages } from "../../services/garages";
@@ -90,44 +94,52 @@ export default function Find() {
 
   const ask = (
     <>
-      <Text style={styles.eyebrow}>Find a garage</Text>
-      <StickerHeadline lead="Park it" sticker="nearby." />
-      <Text style={styles.sub}>Say what you need. We find a garage that fits, and you open it from your phone.</Text>
-
-      <Card style={styles.ask}>
-        <Input
-          value={query}
-          onChangeText={setQuery}
-          placeholder="garage near Pirogov tomorrow 9 to 13, fits a Golf"
-          multiline
-          maxLength={300}
-          accessibilityLabel="Describe the garage you need"
-          style={{ minHeight: 84 }}
-        />
-        <View style={styles.examples}>
-          {EXAMPLE_QUERIES.map((q) => (
-            <Pressable
-              key={q}
-              accessibilityRole="button"
-              accessibilityLabel={`Try: ${q}`}
-              onPress={() => search(q)}
-              style={({ pressed }) => [styles.example, pressed && { transform: [{ scale: 0.97 }] }]}
-            >
-              <Text style={styles.exampleText} numberOfLines={1}>
-                {q}
-              </Text>
-            </Pressable>
-          ))}
+      {wide ? null : (
+        <View style={styles.topRow}>
+          <BrandMark />
+          <IconButton icon="time-outline" label="My bookings" onPress={() => router.navigate("/bookings")} />
         </View>
-        <Button
-          title="Find garages"
-          icon="sparkles"
-          variant="accent"
-          loading={searching}
-          disabled={!query.trim()}
-          onPress={() => search()}
-        />
-      </Card>
+      )}
+      <Headline title="Need a garage nearby?" subline="Say what you need. We find one that fits, and you open it from your phone." />
+
+      {/* The Ask card sits on the tilted orange slab, like the phone in the template */}
+      <View style={styles.stage}>
+        <Slab />
+        <Card style={styles.ask}>
+          <Input
+            value={query}
+            onChangeText={setQuery}
+            placeholder="garage near Pirogov tomorrow 9 to 13, fits a Golf"
+            multiline
+            maxLength={300}
+            accessibilityLabel="Describe the garage you need"
+            style={{ minHeight: 84 }}
+          />
+          <View style={styles.examples}>
+            {EXAMPLE_QUERIES.map((q) => (
+              <Pressable
+                key={q}
+                accessibilityRole="button"
+                accessibilityLabel={`Try: ${q}`}
+                onPress={() => search(q)}
+                style={({ pressed }) => [styles.example, pressed && { transform: [{ scale: 0.97 }] }]}
+              >
+                <Text style={styles.exampleText} numberOfLines={1}>
+                  {q}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+          <Button
+            title="Find garages"
+            icon="sparkles"
+            variant="accent"
+            loading={searching}
+            disabled={!query.trim()}
+            onPress={() => search()}
+          />
+        </Card>
+      </View>
 
       {result ? <Understood result={result} onClear={() => setResult(null)} /> : null}
     </>
@@ -191,6 +203,7 @@ export default function Find() {
 
   return (
     <ScreenWrapper scroll refreshing={all.refreshing} onRefresh={all.refresh}>
+      <Glow corner="topRight" />
       <StepTracker active={0} />
       {wide ? (
         // PC: the ask panel stays in view on the left while the results scroll on the right
@@ -243,10 +256,10 @@ function Understood({ result, onClear }: { result: SearchResult; onClear: () => 
 }
 
 const styles = StyleSheet.create({
-  eyebrow: { ...typography.eyebrow, color: colors.accentDeep, marginBottom: spacing.sm },
   eyebrowMuted: { ...typography.eyebrow, color: colors.textMuted },
-  sub: { ...typography.body, color: colors.textMuted, marginTop: spacing.md, marginBottom: spacing.lg },
-  ask: { gap: spacing.md, padding: spacing.md },
+  topRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: spacing.lg },
+  stage: { marginTop: spacing.lg, paddingVertical: spacing.xl },
+  ask: { gap: spacing.md, padding: spacing.md, borderRadius: radius.xl, borderWidth: 6, borderColor: colors.sand, ...shadow.float },
   examples: { gap: 6 },
   example: {
     alignSelf: "flex-start",

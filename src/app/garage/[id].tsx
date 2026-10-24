@@ -3,10 +3,11 @@ import { Image } from "expo-image";
 import { router, useLocalSearchParams } from "expo-router";
 import { ComponentProps, useCallback, useState } from "react";
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View, ViewStyle } from "react-native";
-import { IconTile, SectionTitle } from "../../components/Bits";
+import { IconTile, SectionTitle, Tag } from "../../components/Bits";
 import { Button } from "../../components/Button";
 import { Card } from "../../components/Card";
 import { ChipRow } from "../../components/Chip";
+import { Glow } from "../../components/Glow";
 import { Header } from "../../components/Header";
 import { AppMap } from "../../components/map/AppMap";
 import { PaySheet } from "../../components/PaySheet";
@@ -160,6 +161,16 @@ function BookForm({ garage, busy, from, to }: { garage: Garage; busy: BusySlot[]
 
   const details = (
     <>
+      <View style={styles.hero}>
+        <View style={styles.heroShape} />
+        <View style={styles.heroTop}>
+          <IconTile icon={app ? "phone-portrait" : "key"} size={52} bg={app ? colors.accent : colors.sand} />
+          <Tag label={app ? "App door" : "Host lets you in"} icon={app ? "flash" : "key"} color={colors.accentDeep} outline />
+        </View>
+        <Text style={styles.heroTitle}>{garage.title}</Text>
+        <Text style={styles.heroBody}>{[garage.area, garage.address].filter(Boolean).join(" · ")}</Text>
+      </View>
+
       {garage.image_url ? <Image source={{ uri: garage.image_url }} style={styles.photo} contentFit="cover" /> : null}
 
       <Card style={styles.facts}>
@@ -198,8 +209,8 @@ function BookForm({ garage, busy, from, to }: { garage: Garage; busy: BusySlot[]
               onPress={() => setDay(d)}
               style={({ pressed }) => [styles.dayTile, selected && styles.dayTileOn, pressed && { transform: [{ scale: 0.96 }] }]}
             >
-              <Text style={[styles.dayTop, selected && { color: colors.white }]}>{top}</Text>
-              <Text style={[styles.dayBottom, selected && { color: colors.border }]}>{bottom ?? " "}</Text>
+              <Text style={styles.dayTop}>{top}</Text>
+              <Text style={[styles.dayBottom, selected && { color: colors.accentDeep }]}>{bottom ?? " "}</Text>
             </Pressable>
           );
         })}
@@ -248,12 +259,12 @@ function BookForm({ garage, busy, from, to }: { garage: Garage; busy: BusySlot[]
 
       {clash ? (
         <View style={styles.clash} accessibilityRole="alert">
-          <Ionicons name="alert-circle" size={18} color={colors.error} />
+          <Ionicons name="alert-circle" size={18} color={colors.errorText} />
           <Text style={styles.clashText}>Already booked {formatRange(clash.starts_at, clash.ends_at)}. Pick another time.</Text>
         </View>
       ) : outsideHours ? (
         <View style={styles.clash} accessibilityRole="alert">
-          <Ionicons name="alert-circle" size={18} color={colors.error} />
+          <Ionicons name="alert-circle" size={18} color={colors.errorText} />
           <Text style={styles.clashText}>
             The host only rents it out {summarizeAvailability(garage.availability)}. Pick a time inside those hours.
           </Text>
@@ -295,7 +306,8 @@ function BookForm({ garage, busy, from, to }: { garage: Garage; busy: BusySlot[]
 
   return (
     <ScreenWrapper scroll>
-      <Header title={garage.title} subtitle={[garage.area, garage.address].filter(Boolean).join(" · ")} back />
+      <Glow corner="bottomLeft" />
+      <Header title="Book a garage" back />
       <StepTracker active={1} />
 
       {wide ? (
@@ -381,6 +393,29 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     backgroundColor: colors.surface,
   },
+  hero: {
+    gap: spacing.sm,
+    padding: spacing.lg,
+    marginBottom: spacing.md,
+    borderRadius: radius.xl,
+    backgroundColor: colors.accentSoft,
+    overflow: "hidden",
+  },
+  // The faint tilted square in the hero's corner
+  heroShape: {
+    position: "absolute",
+    top: -40,
+    right: -40,
+    width: 150,
+    height: 150,
+    borderRadius: 36,
+    backgroundColor: colors.accent,
+    opacity: 0.16,
+    transform: [{ rotate: "-14deg" }],
+  },
+  heroTop: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", marginBottom: spacing.sm },
+  heroTitle: { ...typography.h1, color: colors.ink },
+  heroBody: { ...typography.body, color: colors.ink, opacity: 0.85 },
   photo: { height: 200, borderRadius: radius.xl, backgroundColor: colors.sand, marginBottom: spacing.md },
   facts: { padding: spacing.lg, gap: 0 },
   fact: { flexDirection: "row", alignItems: "center", gap: spacing.md, paddingVertical: 10 },
@@ -395,10 +430,12 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     alignItems: "center",
     justifyContent: "center",
+    borderWidth: 2,
+    borderColor: "transparent",
     backgroundColor: colors.surface,
     ...shadow.card,
   },
-  dayTileOn: { backgroundColor: colors.ink },
+  dayTileOn: { backgroundColor: colors.accentSoft, borderColor: colors.accent },
   dayTop: { ...typography.label, color: colors.ink },
   dayBottom: { ...typography.caption, color: colors.textMuted },
   steppers: { marginTop: spacing.md, paddingVertical: spacing.xs },
@@ -427,7 +464,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     backgroundColor: colors.errorSoft,
   },
-  clashText: { ...typography.label, color: colors.error, flex: 1 },
+  clashText: { ...typography.label, color: colors.errorText, flex: 1 },
   description: { ...typography.body, color: colors.ink, paddingTop: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border },
   note: { ...typography.caption, color: colors.textMuted, textAlign: "center", marginTop: spacing.sm },
 });

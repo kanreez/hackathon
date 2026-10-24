@@ -62,7 +62,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
           accessibilityLiveRegion="polite"
           style={[
             styles.toast,
-            toast.type === "error" && { backgroundColor: colors.error },
+            toast.type === "error" && { backgroundColor: colors.error, borderColor: colors.error },
             {
               top: insets.top + spacing.sm,
               opacity: anim,
@@ -73,9 +73,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
           <Ionicons
             name={icons[toast.type]}
             size={20}
-            color={toast.type === "success" ? colors.accent : colors.white}
+            color={toast.type === "success" ? colors.accent : toast.type === "error" ? colors.white : colors.ink}
           />
-          <Text style={styles.text}>{toast.message}</Text>
+          <Text style={[styles.text, toast.type === "error" && { color: colors.white }]}>{toast.message}</Text>
         </Animated.View>
       ) : null}
     </>
@@ -95,9 +95,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: 14,
     borderRadius: radius.pill,
-    backgroundColor: colors.ink,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
     zIndex: 1000,
     ...shadow.float,
   },
-  text: { ...typography.label, color: colors.white, flex: 1 },
+  text: { ...typography.label, color: colors.ink, flex: 1 },
 });

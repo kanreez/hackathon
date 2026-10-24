@@ -188,7 +188,7 @@ export function PaySheet({ checkout, title, range, breakdown, onPaid, onClose, o
               <>
                 {declined ? (
                   <View style={styles.declined} accessibilityRole="alert">
-                    <Ionicons name="alert-circle" size={18} color={colors.error} />
+                    <Ionicons name="alert-circle" size={18} color={colors.errorText} />
                     <Text style={styles.declinedText}>{declined}</Text>
                   </View>
                 ) : null}
@@ -247,7 +247,7 @@ export function PaySheet({ checkout, title, range, breakdown, onPaid, onClose, o
 }
 
 const styles = StyleSheet.create({
-  backdrop: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(32, 22, 15, 0.45)" },
+  backdrop: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0, 0, 0, 0.6)" },
   backdropWide: { justifyContent: "center", alignItems: "center", padding: spacing.lg },
   sheet: {
     maxHeight: "92%",
@@ -289,7 +289,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     backgroundColor: colors.errorSoft,
   },
-  declinedText: { ...typography.label, color: colors.error, flex: 1 },
+  declinedText: { ...typography.label, color: colors.errorText, flex: 1 },
   note: { ...typography.caption, color: colors.textMuted, textAlign: "center" },
   success: { alignItems: "center", gap: spacing.sm, paddingVertical: spacing.lg },
   successTitle: { ...typography.h2, color: colors.success },

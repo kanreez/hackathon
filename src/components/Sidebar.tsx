@@ -45,9 +45,9 @@ export function Sidebar({ state, descriptors, emitter, navigateToTab }: BottomTa
               <Ionicons
                 name={(focused ? icon : `${icon}-outline`) as IconName}
                 size={20}
-                color={focused ? colors.ink : colors.textMuted}
+                color={focused ? colors.onAccent : colors.textMuted}
               />
-              <Text style={[styles.label, focused && { color: colors.ink }]}>{title}</Text>
+              <Text style={[styles.label, focused && { color: colors.onAccent }]}>{title}</Text>
             </Pressable>
           );
         })}
@@ -85,7 +85,7 @@ const styles = StyleSheet.create({
   itemOn: { backgroundColor: colors.accent },
   itemHover: { backgroundColor: colors.sand },
   label: { ...typography.label, fontSize: 15, color: colors.textMuted },
-  host: { gap: spacing.sm, padding: spacing.md, borderRadius: radius.lg, backgroundColor: colors.background },
+  host: { gap: spacing.sm, padding: spacing.md, borderRadius: radius.lg, backgroundColor: colors.accentSoft },
   hostTitle: { ...typography.h3, color: colors.ink },
   hostBody: { ...typography.caption, color: colors.textMuted, marginBottom: spacing.xs },
 });

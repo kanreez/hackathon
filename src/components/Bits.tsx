@@ -3,7 +3,7 @@ import { ComponentProps } from "react";
 import { Pressable, StyleProp, StyleSheet, Text, View, ViewStyle } from "react-native";
 import { colors, radius, shadow, spacing, typography } from "../constants/theme";
 
-// Small shared pieces of the Ember system (DESIGN.md §3 "Patterns to reuse")
+// Small shared pieces of the Ignite system (DESIGN.md)
 
 type IconName = ComponentProps<typeof Ionicons>["name"];
 
@@ -15,8 +15,12 @@ type IconTileProps = {
   style?: StyleProp<ViewStyle>;
 };
 
+// Orange and amber fills always take dark icons
+const ON_ORANGE: string[] = [colors.accent, colors.cta];
+
 // Rounded-square tile holding an icon
-export function IconTile({ icon, size = 44, bg = colors.sand, color = colors.ink, style }: IconTileProps) {
+export function IconTile({ icon, size = 44, bg = colors.sand, color, style }: IconTileProps) {
+  const fg = color ?? (ON_ORANGE.includes(bg) ? colors.onAccent : colors.ink);
   return (
     <View
       style={[
@@ -25,7 +29,7 @@ export function IconTile({ icon, size = 44, bg = colors.sand, color = colors.ink
         style,
       ]}
     >
-      <Ionicons name={icon} size={Math.round(size * 0.46)} color={color} />
+      <Ionicons name={icon} size={Math.round(size * 0.46)} color={fg} />
     </View>
   );
 }
@@ -51,7 +55,7 @@ export function RowAction({ icon, label, onPress }: { icon: IconName; label: str
   );
 }
 
-// 28px ink circles with cream numbers
+// 28px orange badges with dark numbers
 export function NumberedSteps({ steps }: { steps: string[] }) {
   return (
     <View style={styles.steps}>
@@ -110,14 +114,23 @@ export function Tag({
   );
 }
 
-// Display headline with one key word on a rotated tangerine sticker. Capture and auth only.
-export function StickerHeadline({ lead, sticker }: { lead: string; sticker: string }) {
+// Screen intro: big bold white headline with a short orange subline under it
+export function Headline({ title, subline, style }: { title: string; subline?: string; style?: StyleProp<ViewStyle> }) {
   return (
-    <View style={styles.headline} accessibilityRole="header">
-      <Text style={styles.display}>{lead}</Text>
-      <View style={styles.sticker}>
-        <Text style={styles.display}>{sticker}</Text>
-      </View>
+    <View style={[styles.headline, style]}>
+      <Text style={styles.display} accessibilityRole="header">
+        {title}
+      </Text>
+      {subline ? <Text style={styles.subline}>{subline}</Text> : null}
+    </View>
+  );
+}
+
+// The orange logo tile: 40px in headers, 64px on the auth screens
+export function LogoTile({ size = 40 }: { size?: number }) {
+  return (
+    <View style={[styles.tile, { width: size, height: size, borderRadius: Math.round(size * 0.3), backgroundColor: colors.accent }]}>
+      <Ionicons name="car" size={Math.round(size * 0.5)} color={colors.white} />
     </View>
   );
 }
@@ -143,11 +156,11 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: colors.ink,
+    backgroundColor: colors.accent,
     alignItems: "center",
     justifyContent: "center",
   },
-  stepNumText: { ...typography.label, fontSize: 13, color: colors.white },
+  stepNumText: { ...typography.label, fontSize: 13, color: colors.onAccent },
   stepText: { ...typography.body, color: colors.ink, flex: 1, marginTop: 2 },
   urgent: {
     flexDirection: "row",
@@ -180,14 +193,7 @@ const styles = StyleSheet.create({
   },
   tagText: { ...typography.label, fontSize: 12, lineHeight: 15, flexShrink: 1 },
   section: { ...typography.h2, color: colors.ink, marginTop: spacing.xl, marginBottom: spacing.md },
-  headline: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", columnGap: 10 },
+  headline: { gap: spacing.sm },
   display: { ...typography.display, color: colors.ink },
-  sticker: {
-    backgroundColor: colors.accent,
-    paddingHorizontal: 12,
-    paddingBottom: 2,
-    borderRadius: radius.md,
-    transform: [{ rotate: "-2.5deg" }],
-    marginTop: 4,
-  },
+  subline: { ...typography.subline, color: colors.accentDeep },
 });

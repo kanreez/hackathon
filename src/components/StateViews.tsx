@@ -43,7 +43,7 @@ export function ErrorState({ message, onRetry }: ErrorProps) {
   return (
     <View style={styles.box}>
       <View style={[styles.iconWrap, { backgroundColor: colors.errorSoft }]}>
-        <Ionicons name="alert-circle-outline" size={26} color={colors.error} />
+        <Ionicons name="alert-circle-outline" size={26} color={colors.errorText} />
       </View>
       <Text style={styles.title}>Couldn't load this</Text>
       <Text style={styles.body}>{message}</Text>

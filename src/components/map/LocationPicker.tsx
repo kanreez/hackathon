@@ -67,9 +67,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: radius.pill,
-    backgroundColor: colors.ink,
+    backgroundColor: colors.background,
   },
-  hintText: { ...typography.label, fontSize: 13, color: colors.white },
+  hintText: { ...typography.label, fontSize: 13, color: colors.ink },
   row: { flexDirection: "row", alignItems: "center", gap: spacing.sm, flexWrap: "wrap" },
   caption: { ...typography.caption, color: colors.textMuted },
 });

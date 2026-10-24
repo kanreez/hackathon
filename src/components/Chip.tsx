@@ -11,7 +11,7 @@ type ChipProps = {
 };
 
 export function Chip({ label, selected = false, onPress, icon }: ChipProps) {
-  const fg = selected ? colors.white : colors.ink;
+  const fg = selected ? colors.onAccent : colors.ink;
   return (
     <Pressable
       accessibilityRole="button"
@@ -20,7 +20,7 @@ export function Chip({ label, selected = false, onPress, icon }: ChipProps) {
       disabled={!onPress}
       style={({ pressed }) => [
         styles.chip,
-        { backgroundColor: selected ? colors.ink : colors.surface, borderColor: selected ? colors.ink : colors.border },
+        { backgroundColor: selected ? colors.accent : colors.surface, borderColor: selected ? colors.accent : colors.border },
         pressed && { transform: [{ scale: 0.97 }] },
       ]}
     >

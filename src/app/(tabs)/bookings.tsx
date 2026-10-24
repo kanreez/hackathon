@@ -1,6 +1,6 @@
 import { router } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Animated, Easing, StyleSheet, Text, View } from "react-native";
 import { IconTile, SectionTitle, Tag } from "../../components/Bits";
 import { Button } from "../../components/Button";
 import { Card } from "../../components/Card";
@@ -186,7 +186,7 @@ function DoorStatus({ door }: { door: Door }) {
   if (door.phase === "busy") {
     return (
       <View style={styles.status} accessibilityLiveRegion="polite">
-        <IconTile icon="hourglass" size={40} bg={colors.accentSoft} color={colors.accentDeep} />
+        <PulseTile />
         <Text style={styles.statusText}>{BUSY_LABEL[door.action]} waiting for the door</Text>
       </View>
     );
@@ -203,8 +203,32 @@ function DoorStatus({ door }: { door: Door }) {
   }
   return (
     <View style={[styles.status, { backgroundColor: colors.errorSoft }]} accessibilityRole="alert">
-      <IconTile icon="alert-circle" size={40} bg={colors.surface} color={colors.error} />
-      <Text style={[styles.statusText, { color: colors.error }]}>{door.message}</Text>
+      <IconTile icon="alert-circle" size={40} bg={colors.surface} color={colors.errorText} />
+      <Text style={[styles.statusText, { color: colors.errorText }]}>{door.message}</Text>
+    </View>
+  );
+}
+
+// Orange tile with a ring that keeps pulsing out while the door command is on its way
+function PulseTile() {
+  const [pulse] = useState(() => new Animated.Value(0));
+  useEffect(() => {
+    const loop = Animated.loop(Animated.timing(pulse, { toValue: 1, duration: 1400, easing: Easing.out(Easing.quad), useNativeDriver: true }));
+    loop.start();
+    return () => loop.stop();
+  }, [pulse]);
+  return (
+    <View style={styles.pulse}>
+      <Animated.View
+        style={[
+          styles.pulseRing,
+          {
+            opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.6, 0] }),
+            transform: [{ scale: pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.8] }) }],
+          },
+        ]}
+      />
+      <IconTile icon="hourglass" size={40} bg={colors.accent} />
     </View>
   );
 }
@@ -224,7 +248,7 @@ function statusTag(b: Booking): { label: string; bg: string; color: string } {
   if (b.status === "cancelled" && b.payment?.status === "refunded") return { label: "Refunded", bg: colors.accentSoft, color: colors.accentDeep };
   if (b.status === "cancelled") return { label: "Cancelled", bg: colors.sand, color: colors.textMuted };
   if (b.status === "expired") return { label: "Expired", bg: colors.sand, color: colors.textMuted };
-  return { label: "Not paid", bg: colors.errorSoft, color: colors.error };
+  return { label: "Not paid", bg: colors.errorSoft, color: colors.errorText };
 }
 
 type RowProps = { booking: Booking; now: Date; note?: string; muted?: boolean; onChanged?: () => void };
@@ -292,7 +316,9 @@ function BookingRow({ booking, now, note, muted, onChanged }: RowProps) {
 
 const styles = StyleSheet.create({
   page: { maxWidth: 760, width: "100%", alignSelf: "center" },
-  active: { padding: spacing.lg, gap: spacing.sm, borderRadius: radius.xl },
+  active: { padding: spacing.lg, gap: spacing.sm, borderRadius: radius.xl, borderWidth: 2, borderColor: colors.accent },
+  pulse: { width: 40, height: 40, alignItems: "center", justifyContent: "center" },
+  pulseRing: { position: "absolute", width: 40, height: 40, borderRadius: 14, borderWidth: 3, borderColor: colors.accent },
   activeHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   activeTitle: { ...typography.h1, color: colors.ink, marginTop: spacing.xs },
   caption: { ...typography.caption, color: colors.textMuted },

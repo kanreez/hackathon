@@ -58,7 +58,7 @@ export function AppMap({ center, zoom = DEFAULT_ZOOM, pins = [], selectedId, onS
               zIndex={selected ? 2 : 1}
             >
               <View style={[styles.pill, selected && styles.pillOn]}>
-                <Text style={[styles.pillText, selected && { color: colors.ink }]}>{p.label}</Text>
+                <Text style={[styles.pillText, selected && { color: colors.onAccent }]}>{p.label}</Text>
               </View>
             </Marker>
           );
@@ -82,10 +82,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: radius.pill,
-    backgroundColor: colors.ink,
+    backgroundColor: colors.background,
     borderWidth: 2,
     borderColor: colors.white,
   },
   pillOn: { backgroundColor: colors.accent },
-  pillText: { ...typography.label, fontSize: 13, color: colors.white },
+  pillText: { ...typography.label, fontSize: 13, color: colors.ink },
 });

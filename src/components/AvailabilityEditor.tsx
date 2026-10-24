@@ -119,6 +119,6 @@ const styles = StyleSheet.create({
   hour: { ...typography.label, color: colors.ink, minWidth: 44, textAlign: "center" },
   dash: { ...typography.label, color: colors.textMuted },
   off: { ...typography.caption, color: colors.textMuted },
-  error: { ...typography.caption, color: colors.error },
+  error: { ...typography.caption, color: colors.errorText },
   caption: { ...typography.caption, color: colors.textMuted },
 });

@@ -1,86 +1,74 @@
-import { Platform } from "react-native";
-
-// Design tokens for the "Ember" system (see DESIGN.md). Never hardcode a hex in a screen.
-// Direction: warm cream ground, espresso ink for text and primary actions,
-// one tangerine accent reserved for the single most important thing on a screen.
+// Design tokens: "Ignite" dark theme (see DESIGN.md). Re-skin the whole app by editing this file.
+// Dark grainy ground, hot orange for shapes and brand, amber for the main button.
+// Every text/background pair below passes WCAG AA (4.5:1).
 
 export const colors = {
-  background: "#FBF4EA", // cream: app background
-  surface: "#FFFDF9", // cards, rows, inputs, tab bar
-  sand: "#F3E8DA", // secondary buttons, quiet fills, empty thumbnails
-  border: "#EDE1D3", // input borders, dividers, tracker lines
-  ink: "#20160F", // text + primary buttons + selected states
-  inkSoft: "#3A2A1F", // pressed primary
-  textMuted: "#6B5B4E",
-  accent: "#FF6B2C", // tangerine hero colour: only ink text/icons on it
-  accentSoft: "#FFE3D1",
-  accentDeep: "#B23A0B", // tangerine for text/icons on cream
-  success: "#276B3E",
-  successSoft: "#E3F0DF",
-  error: "#B42318", // emergency / immediate action only
-  errorSoft: "#FDE4E1",
-  white: "#FFFDF9", // "white" text on dark fills (warm, not #FFF)
+  background: "#161514", // app ground
+  surface: "#22201E", // cards, rows, tab bar, icon buttons
+  sand: "#2C2926", // inputs, quiet buttons, empty thumbs (name kept for old code)
+  border: "#34302C", // hairlines, input borders, tracker lines
+  ink: "#F7F4F0", // main text; also the fill of "primary" (light) buttons
+  inkSoft: "#E4DED7", // pressed primary
+  onInk: "#161514", // text/icons on an ink (light) fill
+  textMuted: "#A39C95", // hints, captions
+  accent: "#FF5A1F", // hot orange: slabs, logo tile, active tab, step badges
+  accentSoft: "#3A2216", // dark orange tint (chips, selected tiles, context cards)
+  accentDeep: "#FF6A2B", // orange TEXT on the dark ground (sublines, links, eyebrows)
+  cta: "#FF8A1F", // amber: the one forward button per screen
+  ctaPressed: "#F07A10",
+  onAccent: "#161514", // text/icons on accent, cta and route solids
+  success: "#5BCB8A",
+  successSoft: "#17291F",
+  error: "#D92D20", // emergency fill, white text on it
+  errorSoft: "#3A1714",
+  errorText: "#FF8A80", // red text on the dark ground
+  white: "#FFFFFF", // true white: logo glyph, text on error fill
 
   // Aliases kept so older code keeps working
-  primary: "#20160F",
-  primaryDark: "#3A2A1F",
-  secondary: "#F3E8DA",
-  text: "#20160F",
+  primary: "#F7F4F0",
+  primaryDark: "#E4DED7",
+  secondary: "#2C2926",
+  text: "#F7F4F0",
 } as const;
 
-// Route colours: solid for icon tiles and outlined tags, tint for card backgrounds with ink text
+// One pair per category. solid = icon tiles, tags, accents; tint = card background.
+// Text on solid uses colors.onAccent; text on tint uses colors.ink or the solid.
 export const routeColors = {
-  diy: { solid: "#35692A", tint: "#E6F1D9" },
-  specialist: { solid: "#8A5200", tint: "#FCEBC8" },
-  manager: { solid: "#7A3A8C", tint: "#F2E3F5" },
-  neighbor: { solid: "#1F6F6A", tint: "#DCEFEC" },
+  diy: { solid: "#7BCB5C", tint: "#1E2A1A" },
+  specialist: { solid: "#F2B441", tint: "#2E2414" },
+  manager: { solid: "#C99AE6", tint: "#2A1F30" },
+  neighbor: { solid: "#56C7BA", tint: "#14292A" },
 } as const;
 
-// RN boxShadow strings: spread into styles, never add elevation
+// Shadows read as depth on dark only when they are strong. RN boxShadow works on iOS, Android, web.
 export const shadow = {
-  card: { boxShadow: "0px 2px 10px rgba(74, 44, 20, 0.07)" },
-  float: { boxShadow: "0px 10px 30px rgba(74, 44, 20, 0.16)" },
-  glow: { boxShadow: "0px 10px 26px rgba(255, 107, 44, 0.35)" },
+  card: { boxShadow: "0px 8px 24px rgba(0, 0, 0, 0.35)" },
+  float: { boxShadow: "0px 18px 40px rgba(0, 0, 0, 0.55)" },
+  glow: { boxShadow: "0px 12px 28px rgba(255, 138, 31, 0.35)" }, // amber CTA only
 } as const;
-
-// Bricolage Grotesque has no Cyrillic. Phones fall back to the system sans per glyph;
-// on web the CSS stack does the same, instead of the browser's default serif.
-const withFallback = (name: string) =>
-  Platform.OS === "web" ? `${name}, system-ui, "Segoe UI", Roboto, Arial, sans-serif` : name;
 
 // Loaded in src/app/_layout.tsx. Change the family there and here together.
+// Montserrat covers Cyrillic, so Bulgarian text keeps the same font.
 export const fonts = {
-  regular: withFallback("BricolageGrotesque_400Regular"),
-  medium: withFallback("BricolageGrotesque_500Medium"),
-  semibold: withFallback("BricolageGrotesque_600SemiBold"),
-  bold: withFallback("BricolageGrotesque_800ExtraBold"),
-};
-
-export const spacing = {
-  xs: 4,
-  sm: 8,
-  md: 16,
-  lg: 24,
-  xl: 32,
-  xxl: 48,
+  regular: "Montserrat_400Regular",
+  medium: "Montserrat_500Medium",
+  semibold: "Montserrat_600SemiBold",
+  bold: "Montserrat_800ExtraBold",
 } as const;
 
-// Radius follows hierarchy: big feature blocks are rounder than small controls.
-export const radius = {
-  sm: 10,
-  md: 16, // inputs, small tiles
-  lg: 22, // cards, rows
-  xl: 32, // hero blocks
-  pill: 999, // buttons, chips, tags
-} as const;
+export const spacing = { xs: 4, sm: 8, md: 16, lg: 24, xl: 32, xxl: 48 } as const;
+
+// Radius follows hierarchy: hero blocks are rounder than small controls.
+export const radius = { sm: 12, md: 16, lg: 22, xl: 34, pill: 999 } as const;
 
 export const typography = {
-  display: { fontFamily: fonts.bold, fontSize: 38, lineHeight: 40, letterSpacing: -1 },
-  h1: { fontFamily: fonts.bold, fontSize: 28, lineHeight: 32, letterSpacing: -0.6 },
-  h2: { fontFamily: fonts.bold, fontSize: 21, lineHeight: 26, letterSpacing: -0.3 },
-  h3: { fontFamily: fonts.semibold, fontSize: 17, lineHeight: 22 },
-  body: { fontFamily: fonts.regular, fontSize: 16, lineHeight: 23 },
+  display: { fontFamily: fonts.bold, fontSize: 32, lineHeight: 36, letterSpacing: -0.6 },
+  h1: { fontFamily: fonts.bold, fontSize: 26, lineHeight: 30, letterSpacing: -0.5 },
+  h2: { fontFamily: fonts.bold, fontSize: 19, lineHeight: 24, letterSpacing: -0.2 },
+  h3: { fontFamily: fonts.semibold, fontSize: 16, lineHeight: 21 },
+  body: { fontFamily: fonts.regular, fontSize: 15, lineHeight: 22 },
+  subline: { fontFamily: fonts.medium, fontSize: 15, lineHeight: 21 }, // orange line under headlines
   label: { fontFamily: fonts.semibold, fontSize: 14, lineHeight: 18 },
   caption: { fontFamily: fonts.regular, fontSize: 13, lineHeight: 17 },
-  eyebrow: { fontFamily: fonts.semibold, fontSize: 12, lineHeight: 15, letterSpacing: 1.2, textTransform: "uppercase" },
+  eyebrow: { fontFamily: fonts.semibold, fontSize: 12, lineHeight: 16, letterSpacing: 0.4 },
 } as const;

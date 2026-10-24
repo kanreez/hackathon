@@ -22,9 +22,9 @@ export function StepTracker({ active, steps = STEPS }: { active: number; steps?:
             <View style={styles.step}>
               <View style={[styles.dot, done && styles.dotDone, current && styles.dotCurrent]}>
                 {done ? (
-                  <Ionicons name="checkmark" size={14} color={colors.white} />
+                  <Ionicons name="checkmark" size={14} color={colors.onInk} />
                 ) : (
-                  <Text style={[styles.num, current && { color: colors.ink }]}>{i + 1}</Text>
+                  <Text style={[styles.num, current && { color: colors.onAccent }]}>{i + 1}</Text>
                 )}
               </View>
               <Text style={[styles.label, (done || current) && { color: colors.ink }]}>{label}</Text>

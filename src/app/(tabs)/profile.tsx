@@ -158,7 +158,7 @@ const styles = StyleSheet.create({
   details: { gap: spacing.md, padding: spacing.lg },
   warning: {
     ...typography.caption,
-    color: colors.error,
+    color: colors.errorText,
     backgroundColor: colors.errorSoft,
     padding: spacing.md,
     borderRadius: radius.md,

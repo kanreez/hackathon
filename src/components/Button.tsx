@@ -3,7 +3,7 @@ import { ComponentProps } from "react";
 import { ActivityIndicator, Pressable, PressableProps, StyleSheet, Text } from "react-native";
 import { colors, radius, shadow, spacing, typography } from "../constants/theme";
 
-// accent = tangerine step forward: one per screen
+// accent = the amber step forward: one per screen
 type Variant = "primary" | "accent" | "secondary" | "ghost" | "danger";
 
 type Props = Omit<PressableProps, "children"> & {
@@ -15,11 +15,11 @@ type Props = Omit<PressableProps, "children"> & {
 };
 
 const palette: Record<Variant, { bg: string; fg: string; pressed: string }> = {
-  primary: { bg: colors.ink, fg: colors.white, pressed: colors.inkSoft },
-  accent: { bg: colors.accent, fg: colors.ink, pressed: colors.accent },
+  primary: { bg: colors.ink, fg: colors.onInk, pressed: colors.inkSoft },
+  accent: { bg: colors.cta, fg: colors.onAccent, pressed: colors.ctaPressed },
   secondary: { bg: colors.sand, fg: colors.ink, pressed: colors.border },
   ghost: { bg: "transparent", fg: colors.ink, pressed: colors.sand },
-  danger: { bg: colors.errorSoft, fg: colors.error, pressed: colors.errorSoft },
+  danger: { bg: colors.errorSoft, fg: colors.errorText, pressed: colors.errorSoft },
 };
 
 export function Button({

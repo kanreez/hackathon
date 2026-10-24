@@ -55,7 +55,7 @@ export function IconButton({ icon, label, onPress, tone = "plain" }: IconButtonP
         pressed && { transform: [{ scale: 0.94 }] },
       ]}
     >
-      <Ionicons name={icon} size={20} color={solid ? colors.white : colors.ink} />
+      <Ionicons name={icon} size={20} color={solid ? colors.onInk : colors.ink} />
     </Pressable>
   );
 }

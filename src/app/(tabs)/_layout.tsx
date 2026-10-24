@@ -9,7 +9,7 @@ import { useIsWide } from "../../hooks/useIsWide";
 
 type IconName = ComponentProps<typeof Ionicons>["name"];
 
-// Active tab gets a tangerine pill behind a filled icon
+// Active tab gets an orange pill behind a filled dark icon
 function TabIcon({ name, focused }: { name: string; focused: boolean }) {
   return (
     <View
@@ -25,7 +25,7 @@ function TabIcon({ name, focused }: { name: string; focused: boolean }) {
       <Ionicons
         name={(focused ? name : `${name}-outline`) as IconName}
         size={20}
-        color={focused ? colors.ink : colors.textMuted}
+        color={focused ? colors.onAccent : colors.textMuted}
       />
     </View>
   );
@@ -54,7 +54,9 @@ export default function TabsLayout() {
           paddingTop: 10,
           paddingBottom: 10,
           borderRadius: 36,
-          borderTopWidth: 0,
+          borderTopWidth: 1,
+          borderWidth: 1,
+          borderColor: colors.border,
           backgroundColor: colors.surface,
           ...shadow.float,
         },

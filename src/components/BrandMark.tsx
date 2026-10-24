@@ -1,15 +1,13 @@
-﻿import { Ionicons } from "@expo/vector-icons";
 import { StyleSheet, Text, View } from "react-native";
 import { APP_NAME } from "../constants/app";
-import { colors, typography } from "../constants/theme";
+import { colors, fonts, typography } from "../constants/theme";
+import { LogoTile } from "./Bits";
 
 // App logo + name. Swap the icon for a real logo on the day.
-export function BrandMark() {
+export function BrandMark({ size = 40 }: { size?: number }) {
   return (
     <View style={styles.row}>
-      <View style={styles.mark}>
-        <Ionicons name="car" size={20} color={colors.ink} />
-      </View>
+      <LogoTile size={size} />
       <Text style={styles.name}>{APP_NAME}</Text>
     </View>
   );
@@ -17,13 +15,5 @@ export function BrandMark() {
 
 const styles = StyleSheet.create({
   row: { flexDirection: "row", alignItems: "center", gap: 10 },
-  mark: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    backgroundColor: colors.accent,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  name: { ...typography.h3, color: colors.ink },
+  name: { ...typography.h3, fontFamily: fonts.bold, color: colors.ink },
 });

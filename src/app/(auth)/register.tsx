@@ -1,10 +1,11 @@
-﻿import { Link } from "expo-router";
+import { Link } from "expo-router";
 import { useState } from "react";
 import { Text, View } from "react-native";
-import { StickerHeadline } from "../../components/Bits";
+import { Headline } from "../../components/Bits";
 import { BrandMark } from "../../components/BrandMark";
 import { APP_TAGLINE } from "../../constants/app";
 import { Button } from "../../components/Button";
+import { Glow } from "../../components/Glow";
 import { Input } from "../../components/Input";
 import { ScreenWrapper } from "../../components/ScreenWrapper";
 import { authStyles as styles } from "../../constants/authStyles";
@@ -37,10 +38,10 @@ export default function Register() {
 
   return (
     <ScreenWrapper scroll style={styles.page}>
-      <BrandMark />
+      <Glow corner="topRight" />
+      <BrandMark size={64} />
       <View style={styles.intro}>
-        <StickerHeadline lead="Book it." sticker="Open it." />
-        <Text style={styles.subtitle}>{APP_TAGLINE}</Text>
+        <Headline title="Book it. Open it." subline={APP_TAGLINE} />
         <Text style={styles.title}>Create your account</Text>
       </View>
       <View style={styles.form}>
