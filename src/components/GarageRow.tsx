@@ -1,4 +1,4 @@
-import { StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { SIZE_META } from "../constants/garages";
 import { colors, spacing, typography } from "../constants/theme";
 import { Garage } from "../types/garage";
@@ -17,11 +17,13 @@ export function formatKm(km: number) {
   return km < 1 ? `${Math.round(km * 1000)} m` : `${km.toFixed(1)} km`;
 }
 
-// One garage in a list: access tile, title, where, tags, price, and a directions action
+// One garage in a list: access tile, title, where, tags, price, and a directions action.
+// The tappable info area and the directions button sit side by side, not one inside the
+// other: on web each becomes a <button>, and a button can't contain another button.
 export function GarageRow({ garage: g, distanceKm, onPress }: Props) {
   const app = g.access === "app";
-  return (
-    <Card style={styles.row} onPress={onPress} accessibilityLabel={`${g.title}, ${formatMoney(g.price_hour)} per hour`}>
+  const info = (
+    <>
       <IconTile
         icon={app ? "phone-portrait" : "key"}
         size={48}
@@ -44,6 +46,22 @@ export function GarageRow({ garage: g, distanceKm, onPress }: Props) {
           {formatMoney(g.price_hour)}/h · {formatMoney(g.price_day)}/day
         </Text>
       </View>
+    </>
+  );
+  return (
+    <Card style={styles.row}>
+      {onPress ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`${g.title}, ${formatMoney(g.price_hour)} per hour`}
+          onPress={onPress}
+          style={({ pressed }) => [styles.info, pressed && { transform: [{ scale: 0.98 }] }]}
+        >
+          {info}
+        </Pressable>
+      ) : (
+        <View style={styles.info}>{info}</View>
+      )}
       <RowAction icon="navigate" label={`Directions to ${g.title}`} onPress={() => openDirections(g)} />
     </Card>
   );
@@ -51,6 +69,7 @@ export function GarageRow({ garage: g, distanceKm, onPress }: Props) {
 
 const styles = StyleSheet.create({
   row: { flexDirection: "row", gap: spacing.md, alignItems: "center", marginBottom: spacing.sm, padding: 14 },
+  info: { flex: 1, flexDirection: "row", gap: spacing.md, alignItems: "center" },
   body: { flex: 1, gap: 4 },
   title: { ...typography.h3, color: colors.ink },
   caption: { ...typography.caption, color: colors.textMuted },
