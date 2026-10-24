@@ -32,14 +32,13 @@ export default function Bookings() {
     return () => clearInterval(t);
   }, []);
 
-  const bookings = data ?? [];
+  // Most recently booked first, inside each section
+  const bookings = [...(data ?? [])].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   const closed = (b: Booking) => b.status === "cancelled" || b.status === "expired";
   // Only a paid booking is active: that's the one the door opens for
   const isActive = (b: Booking) => b.status === "paid" && new Date(b.starts_at) <= now && new Date(b.ends_at) > now;
   const active = bookings.filter(isActive);
-  const upcoming = bookings
-    .filter((b) => !closed(b) && !isActive(b) && new Date(b.ends_at) > now)
-    .sort((a, b) => new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime());
+  const upcoming = bookings.filter((b) => !closed(b) && !isActive(b) && new Date(b.ends_at) > now);
   const past = bookings.filter((b) => closed(b) || new Date(b.ends_at) <= now);
 
   return (
