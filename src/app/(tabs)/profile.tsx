@@ -1,8 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
+import { router } from "expo-router";
 import { ComponentProps, useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Avatar } from "../../components/Avatar";
-import { IconTile, SectionTitle, Tag } from "../../components/Bits";
+import { IconTile, SectionTitle } from "../../components/Bits";
 import { Button } from "../../components/Button";
 import { Card } from "../../components/Card";
 import { Header } from "../../components/Header";
@@ -10,19 +11,14 @@ import { Input } from "../../components/Input";
 import { ScreenWrapper } from "../../components/ScreenWrapper";
 import { Loading } from "../../components/StateViews";
 import { notify } from "../../components/Toast";
-import { colors, radius, routeColors, spacing, typography } from "../../constants/theme";
+import { colors, radius, spacing, typography } from "../../constants/theme";
 import { useAuth } from "../../context/AuthContext";
-import { useRole } from "../../context/RoleContext";
 import { useAsync } from "../../hooks/useAsync";
-import { uploadImage } from "../../services/storage";
 import { supabase } from "../../services/supabase";
 import { getProfile, ProfileUpdate, updateProfile } from "../../services/userService";
-import { pickImage } from "../../utils/media";
 
 export default function Profile() {
   const { user, logout } = useAuth();
-  const { role, canSwitch, setRole } = useRole();
-  const [switching, setSwitching] = useState(false);
   const { data: profile, loading, error, setData } = useAsync(
     () => (user ? getProfile(user.id) : Promise.resolve(null)),
     [user?.id]
@@ -31,23 +27,18 @@ export default function Profile() {
   const [fullName, setFullName] = useState("");
   const [username, setUsername] = useState("");
   const [saving, setSaving] = useState(false);
-  const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
     setFullName(profile?.full_name ?? user?.user_metadata?.full_name ?? "");
     setUsername(profile?.username ?? "");
   }, [profile, user]);
 
-  const avatarUrl = profile?.avatar_url ?? user?.user_metadata?.avatar_url ?? null;
-
-  // Saves to the profiles table and to the login's metadata, so Home sees the change too
+  // Saves to the profiles table and to the login's metadata
   const persist = async (updates: ProfileUpdate) => {
     if (!user) return;
     const saved = await updateProfile(user.id, updates);
     setData(saved);
-    await supabase.auth.updateUser({
-      data: { full_name: saved.full_name, avatar_url: saved.avatar_url },
-    });
+    await supabase.auth.updateUser({ data: { full_name: saved.full_name } });
   };
 
   const save = async () => {
@@ -62,33 +53,6 @@ export default function Profile() {
     }
   };
 
-  const changePhoto = async () => {
-    if (!user) return;
-    try {
-      const img = await pickImage({ base64: true });
-      if (!img) return;
-      setUploading(true);
-      const url = await uploadImage(img, user.id);
-      await persist({ avatar_url: url });
-      notify("Photo updated");
-    } catch (e: any) {
-      notify(e.message, "error");
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const toggleRole = async () => {
-    try {
-      setSwitching(true);
-      await setRole(role === "manager" ? "resident" : "manager");
-    } catch (e: any) {
-      notify(e.message, "error");
-    } finally {
-      setSwitching(false);
-    }
-  };
-
   const onLogout = async () => {
     try {
       await logout();
@@ -97,16 +61,12 @@ export default function Profile() {
     }
   };
 
-  const isManager = role === "manager";
-
   return (
     <ScreenWrapper scroll style={styles.page}>
       <Header title="Profile" />
 
       <View style={styles.hero}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Change photo" onPress={changePhoto}>
-          <Avatar uri={avatarUrl} name={fullName || user?.email} size={72} />
-        </Pressable>
+        <Avatar name={fullName || user?.email} size={72} />
         <View style={{ flex: 1, gap: 4 }}>
           <Text style={styles.name} numberOfLines={1}>
             {fullName || "No name yet"}
@@ -114,31 +74,12 @@ export default function Profile() {
           <Text style={styles.caption} numberOfLines={1}>
             {user?.email}
           </Text>
-          <View style={{ marginTop: 4 }}>
-            {isManager ? (
-              <Tag label="Домоуправител" icon="business" color={routeColors.manager.solid} outline />
-            ) : (
-              <Tag label="Resident" icon="home" bg={colors.sand} />
-            )}
-          </View>
         </View>
       </View>
 
       <Card style={styles.list}>
-        <SettingRow
-          icon="camera"
-          label={uploading ? "Uploading photo…" : avatarUrl ? "Change photo" : "Add photo"}
-          onPress={uploading ? undefined : changePhoto}
-        />
-        {canSwitch ? (
-          <SettingRow
-            icon="swap-horizontal"
-            label={switching ? "Switching…" : isManager ? "Switch to resident" : "Switch to building manager"}
-            hint="Demo only"
-            onPress={switching ? undefined : toggleRole}
-            divider
-          />
-        ) : null}
+        <SettingRow icon="home" label="Your garages" hint="List a garage and pair its door" onPress={() => router.push("/host")} />
+        <SettingRow icon="key" label="My bookings" onPress={() => router.navigate("/bookings")} divider />
       </Card>
 
       {loading ? (

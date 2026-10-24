@@ -1,4 +1,4 @@
-// Claude (Anthropic) provider for /api/ai, photo triage and the manager plan
+// Claude (Anthropic) provider for /api/ai and the plain-language garage search
 const Anthropic = require("@anthropic-ai/sdk");
 
 const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || "claude-haiku-5-5";
@@ -14,7 +14,8 @@ function toJsonSchema(node) {
     out.additionalProperties = false;
   }
   if (type === "array") out.items = toJsonSchema(node.items);
-  if (node.nullable) out = type === "object" ? { anyOf: [out, { type: "null" }] } : { ...out, type: [type, "null"] };
+  // Objects and enums can't take a ["type", "null"] union, so they become anyOf
+  if (node.nullable) out = type === "object" || out.enum ? { anyOf: [out, { type: "null" }] } : { ...out, type: [type, "null"] };
   return out;
 }
 
@@ -36,7 +37,7 @@ async function askAnthropic({ prompt, system, json, image, schema }) {
       messages: [{ role: "user", content }],
       ...(schema ? { output_config: { format: { type: "json_schema", schema: toJsonSchema(schema) } } } : {}),
     });
-    if (response.stop_reason === "refusal") return { status: 422, error: "The AI declined this request. Try another photo." };
+    if (response.stop_reason === "refusal") return { status: 422, error: "The AI declined this request. Try rephrasing it." };
     const text = response.content.filter((b) => b.type === "text").map((b) => b.text).join("");
     return { reply: text };
   } catch (err) {

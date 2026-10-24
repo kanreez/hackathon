@@ -3,17 +3,17 @@ import { Fragment } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { colors, typography } from "../constants/theme";
 
-const STEPS = ["Snap", "Check", "Fix"];
+const STEPS = ["Find", "Book", "Open"];
 
-// The resident flow at a glance: 1 Snap → 2 Check → 3 Fix
-export function StepTracker({ active }: { active: 0 | 1 | 2 }) {
+// The renter flow at a glance: 1 Find → 2 Book → 3 Open
+export function StepTracker({ active, steps = STEPS }: { active: number; steps?: string[] }) {
   return (
     <View
       style={styles.row}
       accessibilityRole="progressbar"
-      accessibilityLabel={`Step ${active + 1} of 3: ${STEPS[active]}`}
+      accessibilityLabel={`Step ${active + 1} of ${steps.length}: ${steps[active]}`}
     >
-      {STEPS.map((label, i) => {
+      {steps.map((label, i) => {
         const done = i < active;
         const current = i === active;
         return (

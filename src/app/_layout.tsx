@@ -13,7 +13,6 @@ import { ActivityIndicator, View } from "react-native";
 import { ToastProvider } from "../components/Toast";
 import { colors } from "../constants/theme";
 import { AuthProvider, useAuth } from "../context/AuthContext";
-import { RoleProvider } from "../context/RoleContext";
 import "../global.css";
 
 // Keep the splash screen up until the fonts are ready
@@ -43,15 +42,9 @@ function RootNavigator() {
     <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.background } }}>
       <Stack.Screen name="(tabs)" />
       <Stack.Screen name="(auth)" />
-      <Stack.Screen name="processing" options={{ gestureEnabled: false }} />
-      <Stack.Screen name="result" />
-      <Stack.Screen name="report/[id]" />
-      <Stack.Screen name="item/[id]" />
-      <Stack.Screen name="item/edit" options={{ presentation: "modal" }} />
-      <Stack.Screen
-        name="modal"
-        options={{ presentation: "modal", headerShown: true, title: "Modal" }}
-      />
+      <Stack.Screen name="garage/[id]" />
+      <Stack.Screen name="host/index" />
+      <Stack.Screen name="host/new" />
     </Stack>
   );
 }
@@ -73,12 +66,10 @@ export default function RootLayout() {
 
   return (
     <AuthProvider>
-      <RoleProvider>
-        <ToastProvider>
-          <StatusBar style="dark" />
-          <RootNavigator />
-        </ToastProvider>
-      </RoleProvider>
+      <ToastProvider>
+        <StatusBar style="dark" />
+        <RootNavigator />
+      </ToastProvider>
     </AuthProvider>
   );
 }

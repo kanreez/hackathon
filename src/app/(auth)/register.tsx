@@ -1,4 +1,4 @@
-import { Link } from "expo-router";
+﻿import { Link } from "expo-router";
 import { useState } from "react";
 import { Text, View } from "react-native";
 import { StickerHeadline } from "../../components/Bits";
@@ -39,7 +39,7 @@ export default function Register() {
     <ScreenWrapper scroll style={styles.page}>
       <BrandMark />
       <View style={styles.intro}>
-        <StickerHeadline lead="Snap it." sticker="Fix it." />
+        <StickerHeadline lead="Book it." sticker="Open it." />
         <Text style={styles.subtitle}>{APP_TAGLINE}</Text>
         <Text style={styles.title}>Create your account</Text>
       </View>

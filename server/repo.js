@@ -1,56 +1,59 @@
-// Data access for reports, building context and roles.
-// Uses the Supabase tables from supabase/reports.sql when they exist, otherwise an in-memory
+// Data access for garages, bookings and door commands.
+// Uses the Supabase tables from supabase/garages.sql when they exist, otherwise an in-memory
 // store (seeded below) so the demo works before the database is set up. Memory is lost on restart.
 const crypto = require("crypto");
 
-const BUILDING_ID = process.env.BUILDING_ID || "demo-building";
-const PHOTO_BUCKET = "photos";
+const newDeviceKey = () => crypto.randomBytes(16).toString("hex");
 
-const daysAgo = (d) => new Date(Date.now() - d * 86400000).toISOString();
-
-const SEED_CONTEXT = {
-  building_id: BUILDING_ID,
-  name: "Block 12, entrance B (sample)",
-  address: "ul. Sample 12, Lozenets, Sofia",
-  year: 1984,
-  type: "panel",
-  pipe_material: "Galvanised steel risers, PPR inside most flats",
-  valve_location_text: "Main water valve in the basement, left of the stairs, behind the blue door",
-  valve_photo_url: null,
-  panel_location_text: "Electrical panel on each landing, key with the manager",
-  contractors: [
-    { name: "Glass & Frames Ltd (sample)", trade: "glazier", phone: "+359 88 000 0005" },
-    { name: "Plumber Georgiev (sample)", trade: "plumber", phone: "+359 88 000 0001" },
-  ],
-  past_repairs: [
-    { year: 2024, what: "Replaced stairwell windows on floors 1-4", contractor: "Glass & Frames Ltd (sample)" },
-    { year: 2023, what: "Replaced basement section of the cold water riser", contractor: "Plumber Georgiev (sample)" },
-  ],
+// Dev-only keys for the two seeded "app" garages, so an ESP32 can be flashed once and keep
+// working across server restarts. Real garages get a random key from newDeviceKey().
+const SEED_KEYS = {
+  g1: process.env.DEMO_DEVICE_KEY_1 || "dev-door-lagera-1",
+  g2: process.env.DEMO_DEVICE_KEY_2 || "dev-door-krasno-2",
 };
 
-const seedReport = (days, diagnosis, severity, status, extra = {}) => ({
-  id: crypto.randomUUID(),
-  reporter_id: null,
-  building_id: BUILDING_ID,
-  photo_url: null,
-  scope: "common",
-  note: null,
-  route: "manager",
-  status,
-  manager_plan: null,
-  created_at: daysAgo(days),
-  ai_result: { diagnosis, severity, category: "other", route: "manager", immediate_action: "Nothing urgent", ...extra },
+const seedGarage = (id, fields) => ({
+  id,
+  host_id: null,
+  image_url: null,
+  device_key: SEED_KEYS[id] ?? newDeviceKey(),
+  created_at: new Date().toISOString(),
+  ...fields,
 });
 
-const SEED_REPORTS = [
-  seedReport(2, "Stairwell light out on floor 5", "low", "in_progress", { category: "electrical" }),
-  seedReport(6, "Entrance door closer broken, door slams", "low", "fixed"),
-  seedReport(9, "Damp patch on basement ceiling near riser", "medium", "fixed", { category: "plumbing" }),
-  seedReport(14, "Cracked tile on entrance steps", "low", "sent", { category: "structural" }),
+const SEED_GARAGES = [
+  seedGarage("g1", {
+    title: "Covered garage by Pirogov (sample)", area: "Lagera", address: "ul. Tsar Samuil 110",
+    latitude: 42.6879, longitude: 23.3009, size: "medium", covered: true, price_hour: 3, price_day: 20, access: "app",
+  }),
+  seedGarage("g2", {
+    title: "Wide garage with remote door (sample)", area: "Krasno Selo", address: "bul. Tsar Boris III 41",
+    latitude: 42.6822, longitude: 23.2901, size: "large", covered: true, price_hour: 4, price_day: 25, access: "app",
+  }),
+  seedGarage("g3", {
+    title: "Small box near the metro (sample)", area: "Lagera", address: "ul. Dimitar Petkov 12",
+    latitude: 42.6851, longitude: 23.2982, size: "small", covered: true, price_hour: 2, price_day: 12, access: "manual",
+  }),
+  seedGarage("g4", {
+    title: "Open yard spot, Hristo Botev (sample)", area: "Lagera", address: "bul. Hristo Botev 64",
+    latitude: 42.6905, longitude: 23.3041, size: "medium", covered: false, price_hour: 1.5, price_day: 9, access: "manual",
+  }),
+  seedGarage("g5", {
+    title: "Basement garage, Hladilnika (sample)", area: "Krasno Selo", address: "ul. Kozyak 8",
+    latitude: 42.6789, longitude: 23.2932, size: "medium", covered: true, price_hour: 2.5, price_day: 15, access: "manual",
+  }),
+  seedGarage("g6", {
+    title: "Garage by South Park (sample)", area: "Lozenets", address: "ul. Krichim 21",
+    latitude: 42.6741, longitude: 23.3196, size: "large", covered: true, price_hour: 3.5, price_day: 22, access: "manual",
+  }),
+  seedGarage("g7", {
+    title: "Covered spot on Cherni Vrah (sample)", area: "Lozenets", address: "bul. Cherni Vrah 47",
+    latitude: 42.6712, longitude: 23.3261, size: "small", covered: true, price_hour: 2, price_day: 13, access: "manual",
+  }),
 ];
 
 function createRepo(supabase) {
-  const mem = { reports: [...SEED_REPORTS], context: { ...SEED_CONTEXT }, roles: new Map() };
+  const mem = { garages: [...SEED_GARAGES], bookings: [], commands: [] };
   const tableOk = {};
 
   // Checks once per table whether Supabase has it; falls back to memory if not
@@ -64,105 +67,171 @@ function createRepo(supabase) {
     return tableOk[table];
   }
 
-  async function uploadPhoto(userId, base64, mimeType) {
-    const ext = (mimeType.split("/")[1] || "jpg").replace("jpeg", "jpg");
-    const path = `reports/${userId}/${Date.now()}.${ext}`;
-    const { error } = await supabase.storage
-      .from(PHOTO_BUCKET)
-      .upload(path, Buffer.from(base64, "base64"), { contentType: mimeType });
-    if (error) {
-      console.warn(`photo upload skipped (${error.message}). Create a public "${PHOTO_BUCKET}" bucket.`);
-      return null;
+  const must = ({ data, error }) => {
+    if (error) throw new Error(error.message);
+    return data;
+  };
+
+  // ---------- garages ----------
+  async function listGarages() {
+    if (await hasTable("garages")) return must(await supabase.from("garages").select("*").order("created_at"));
+    return [...mem.garages];
+  }
+
+  async function getGarage(id) {
+    if (await hasTable("garages")) return must(await supabase.from("garages").select("*").eq("id", id).maybeSingle());
+    return mem.garages.find((g) => g.id === id) ?? null;
+  }
+
+  async function getGarageByDeviceKey(key) {
+    if (!key) return null;
+    if (await hasTable("garages")) return must(await supabase.from("garages").select("*").eq("device_key", key).maybeSingle());
+    return mem.garages.find((g) => g.device_key === key) ?? null;
+  }
+
+  async function listGaragesByHost(hostId) {
+    if (await hasTable("garages")) {
+      return must(await supabase.from("garages").select("*").eq("host_id", hostId).order("created_at"));
     }
-    return supabase.storage.from(PHOTO_BUCKET).getPublicUrl(path).data.publicUrl;
+    return mem.garages.filter((g) => g.host_id === hostId);
   }
 
-  async function createReport(fields) {
-    const row = { building_id: BUILDING_ID, ...fields };
-    if (await hasTable("reports")) {
-      const { data, error } = await supabase.from("reports").insert(row).select("*").single();
-      if (error) throw new Error(error.message);
-      return data;
+  async function createGarage(fields) {
+    const row = { ...fields, device_key: newDeviceKey() };
+    if (await hasTable("garages")) return must(await supabase.from("garages").insert(row).select("*").single());
+    const garage = { id: crypto.randomUUID(), created_at: new Date().toISOString(), image_url: null, ...row };
+    mem.garages.push(garage);
+    return garage;
+  }
+
+  // ---------- bookings ----------
+  async function listBookingsForGarage(garageId) {
+    if (await hasTable("bookings")) {
+      return must(await supabase.from("bookings").select("*").eq("garage_id", garageId).eq("status", "confirmed"));
     }
-    const report = { id: crypto.randomUUID(), created_at: new Date().toISOString(), manager_plan: null, ...row };
-    mem.reports.unshift(report);
-    return report;
+    return mem.bookings.filter((b) => b.garage_id === garageId && b.status === "confirmed");
   }
 
-  async function getReport(id) {
-    if (await hasTable("reports")) {
-      const { data, error } = await supabase.from("reports").select("*").eq("id", id).maybeSingle();
-      if (error) throw new Error(error.message);
-      return data;
+  async function listAllConfirmedBookings() {
+    if (await hasTable("bookings")) return must(await supabase.from("bookings").select("*").eq("status", "confirmed"));
+    return mem.bookings.filter((b) => b.status === "confirmed");
+  }
+
+  async function listBookingsByRenter(renterId) {
+    if (await hasTable("bookings")) {
+      return must(
+        await supabase.from("bookings").select("*").eq("renter_id", renterId).order("starts_at", { ascending: false })
+      );
     }
-    return mem.reports.find((r) => r.id === id) ?? null;
+    return mem.bookings
+      .filter((b) => b.renter_id === renterId)
+      .sort((a, b) => new Date(b.starts_at) - new Date(a.starts_at));
   }
 
-  async function updateReport(id, patch) {
-    if (await hasTable("reports")) {
-      const { data, error } = await supabase.from("reports").update(patch).eq("id", id).select("*").maybeSingle();
-      if (error) throw new Error(error.message);
-      return data;
+  async function createBooking(fields) {
+    const row = { status: "confirmed", ...fields };
+    if (await hasTable("bookings")) return must(await supabase.from("bookings").insert(row).select("*").single());
+    const booking = { id: crypto.randomUUID(), created_at: new Date().toISOString(), ...row };
+    mem.bookings.push(booking);
+    return booking;
+  }
+
+  // The renter's booking for this garage that covers "now", if any
+  async function findActiveBooking(renterId, garageId, now = new Date()) {
+    const iso = now.toISOString();
+    if (await hasTable("bookings")) {
+      const rows = must(
+        await supabase
+          .from("bookings")
+          .select("*")
+          .eq("renter_id", renterId)
+          .eq("garage_id", garageId)
+          .eq("status", "confirmed")
+          .lte("starts_at", iso)
+          .gt("ends_at", iso)
+          .limit(1)
+      );
+      return rows[0] ?? null;
     }
-    const report = mem.reports.find((r) => r.id === id);
-    if (report) Object.assign(report, patch);
-    return report ?? null;
+    return (
+      mem.bookings.find(
+        (b) =>
+          b.renter_id === renterId &&
+          b.garage_id === garageId &&
+          b.status === "confirmed" &&
+          new Date(b.starts_at) <= now &&
+          new Date(b.ends_at) > now
+      ) ?? null
+    );
   }
 
-  // Reports routed to the manager for this building, newest first
-  async function listInbox(buildingId) {
-    if (await hasTable("reports")) {
-      const { data, error } = await supabase
-        .from("reports")
-        .select("*")
-        .eq("building_id", buildingId)
-        .eq("route", "manager")
-        .order("created_at", { ascending: false })
-        .limit(50);
-      if (error) throw new Error(error.message);
-      return data;
+  // ---------- door commands ----------
+  async function createCommand(fields) {
+    const row = { action: "open", status: "queued", ...fields };
+    if (await hasTable("device_commands")) {
+      return must(await supabase.from("device_commands").insert(row).select("*").single());
     }
-    return mem.reports.filter((r) => r.building_id === buildingId && r.route === "manager");
+    const command = { id: crypto.randomUUID(), created_at: new Date().toISOString(), delivered_at: null, acked_at: null, error: null, ...row };
+    mem.commands.push(command);
+    return command;
   }
 
-  async function getContext(buildingId) {
-    if (await hasTable("building_context")) {
-      const { data, error } = await supabase
-        .from("building_context")
-        .select("*")
-        .eq("building_id", buildingId)
-        .maybeSingle();
-      if (error) throw new Error(error.message);
-      return data ?? { ...SEED_CONTEXT, building_id: buildingId };
+  async function getCommand(id) {
+    if (await hasTable("device_commands")) {
+      return must(await supabase.from("device_commands").select("*").eq("id", id).maybeSingle());
     }
-    return mem.context;
+    return mem.commands.find((c) => c.id === id) ?? null;
   }
 
-  async function saveContext(buildingId, context) {
-    const row = { ...context, building_id: buildingId };
-    if (await hasTable("building_context")) {
-      const { data, error } = await supabase.from("building_context").upsert(row).select("*").single();
-      if (error) throw new Error(error.message);
-      return data;
+  async function updateCommand(id, patch) {
+    if (await hasTable("device_commands")) {
+      return must(await supabase.from("device_commands").update(patch).eq("id", id).select("*").maybeSingle());
     }
-    mem.context = row;
-    return row;
+    const command = mem.commands.find((c) => c.id === id);
+    if (command) Object.assign(command, patch);
+    return command ?? null;
   }
 
-  // Role comes from profiles.role; memory keeps demo switches when that column is missing
-  async function getRole(userId) {
-    const { data, error } = await supabase.from("profiles").select("role").eq("id", userId).maybeSingle();
-    if (!error && data?.role) return data.role;
-    return mem.roles.get(userId) ?? "resident";
+  // Oldest queued command the device hasn't been handed yet. Marking it delivered stops a
+  // device that polls every second from opening the door twice for one tap.
+  async function takeNextCommand(garageId) {
+    let next;
+    if (await hasTable("device_commands")) {
+      const rows = must(
+        await supabase
+          .from("device_commands")
+          .select("*")
+          .eq("garage_id", garageId)
+          .eq("status", "queued")
+          .is("delivered_at", null)
+          .order("created_at")
+          .limit(1)
+      );
+      next = rows[0];
+    } else {
+      next = mem.commands.find((c) => c.garage_id === garageId && c.status === "queued" && !c.delivered_at);
+    }
+    if (!next) return null;
+    return updateCommand(next.id, { delivered_at: new Date().toISOString() });
   }
 
-  async function setRole(userId, role) {
-    const { data, error } = await supabase.from("profiles").update({ role }).eq("id", userId).select("role");
-    if (error || !data?.length) mem.roles.set(userId, role);
-    return role;
-  }
-
-  return { BUILDING_ID, uploadPhoto, createReport, getReport, updateReport, listInbox, getContext, saveContext, getRole, setRole };
+  return {
+    SEED_KEYS,
+    listGarages,
+    getGarage,
+    getGarageByDeviceKey,
+    listGaragesByHost,
+    createGarage,
+    listBookingsForGarage,
+    listAllConfirmedBookings,
+    listBookingsByRenter,
+    createBooking,
+    findActiveBooking,
+    createCommand,
+    getCommand,
+    updateCommand,
+    takeNextCommand,
+  };
 }
 
 module.exports = { createRepo };

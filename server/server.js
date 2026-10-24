@@ -5,9 +5,7 @@ const express = require("express");
 const cors = require("cors");
 const { createClient } = require("@supabase/supabase-js");
 const { askAnthropic } = require("./anthropic");
-const triage = require("./triage");
-const manager = require("./manager");
-const { SPECIALISTS, nearestStores } = require("./data");
+const G = require("./garages");
 const { createRepo } = require("./repo");
 
 const missing = ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"].filter((k) => !process.env[k]);
@@ -30,8 +28,7 @@ const supabase = createClient(
 const repo = createRepo(supabase);
 
 app.use(cors());
-// Photos arrive as base64, so allow bigger bodies than the 100kb default
-app.use(express.json({ limit: "15mb" }));
+app.use(express.json());
 
 // Verifies the Supabase access token sent by the app
 async function requireAuth(req, res, next) {
@@ -45,12 +42,21 @@ async function requireAuth(req, res, next) {
   next();
 }
 
-// Use after requireAuth on домоуправител-only routes
-async function requireManager(req, res, next) {
-  req.role = await repo.getRole(req.user.id);
-  if (req.role !== "manager") return res.status(403).json({ error: "Only the building manager can do this" });
-  next();
+// Verifies the ESP32's secret: it only ever sees commands for its own garage
+async function requireDevice(req, res, next) {
+  try {
+    const garage = await repo.getGarageByDeviceKey(req.headers["x-device-key"]);
+    if (!garage) return res.status(401).json({ error: "Unknown device key" });
+    req.garage = garage;
+    deviceLastSeen.set(garage.id, new Date().toISOString());
+    next();
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 }
+
+// Wraps a route so thrown errors become a 500 with the message
+const route = (fn) => (req, res) => fn(req, res).catch((err) => res.status(500).json({ error: err.message }));
 
 app.get("/", (_req, res) => res.json({ status: "ok" }));
 
@@ -62,23 +68,7 @@ app.get("/api/me", requireAuth, async (req, res) => {
     .maybeSingle();
 
   if (error) return res.status(500).json({ error: error.message });
-  const role = await repo.getRole(req.user.id);
-  res.json({
-    user: { id: req.user.id, email: req.user.email },
-    profile: data,
-    role,
-    building_id: repo.BUILDING_ID,
-    role_switch: DEMO_ROLE_SWITCH,
-  });
-});
-
-// Demo-only role switch (resident <-> manager). Turn off with DEMO_ROLE_SWITCH=false.
-const DEMO_ROLE_SWITCH = process.env.DEMO_ROLE_SWITCH !== "false";
-app.put("/api/me/role", requireAuth, async (req, res) => {
-  if (!DEMO_ROLE_SWITCH) return res.status(403).json({ error: "Role switch is disabled" });
-  const { role } = req.body;
-  if (!["resident", "manager"].includes(role)) return res.status(400).json({ error: "role must be resident or manager" });
-  res.json({ role: await repo.setRole(req.user.id, role) });
+  res.json({ user: { id: req.user.id, email: req.user.email }, profile: data });
 });
 
 // ==========================================
@@ -111,21 +101,13 @@ async function withRetries(attempts, fn) {
   return result;
 }
 
-async function askOpenAI({ prompt, system, json, image, schema }) {
+async function askOpenAI({ prompt, system, json, schema }) {
   if (!process.env.OPENAI_API_KEY) throw new Error("OPENAI_API_KEY is missing in server/.env");
   const messages = [
     ...(system || json
       ? [{ role: "system", content: [system, json ? "Respond only with valid JSON." : "", schema ? `JSON shape: ${JSON.stringify(schema)}` : ""].filter(Boolean).join("\n") }]
       : []),
-    {
-      role: "user",
-      content: image
-        ? [
-            { type: "text", text: prompt },
-            { type: "image_url", image_url: { url: `data:${image.mimeType};base64,${image.data}` } },
-          ]
-        : prompt,
-    },
+    { role: "user", content: prompt },
   ];
   const r = await withRetries(
     [{ arg: OPENAI_MODEL, wait: 0 }, { arg: OPENAI_MODEL, wait: 1000 }, { arg: OPENAI_MODEL, wait: 2500 }],
@@ -146,17 +128,10 @@ async function askOpenAI({ prompt, system, json, image, schema }) {
   return { reply: r.data.choices?.[0]?.message?.content || "" };
 }
 
-async function askGemini({ prompt, system, json, image, schema }) {
+async function askGemini({ prompt, system, json, schema }) {
   if (!process.env.GEMINI_API_KEY) throw new Error("GEMINI_API_KEY is missing in server/.env");
   const body = {
-    contents: [
-      {
-        parts: [
-          ...(image ? [{ inlineData: { mimeType: image.mimeType, data: image.data } }] : []),
-          { text: prompt },
-        ],
-      },
-    ],
+    contents: [{ parts: [{ text: prompt }] }],
     ...(system ? { systemInstruction: { parts: [{ text: system }] } } : {}),
     ...(json
       ? { generationConfig: { responseMimeType: "application/json", ...(schema ? { responseSchema: schema } : {}) } }
@@ -184,6 +159,14 @@ async function askGemini({ prompt, system, json, image, schema }) {
 const PROVIDERS = { anthropic: askAnthropic, openai: askOpenAI, gemini: askGemini };
 const ask = (opts) => (PROVIDERS[AI_PROVIDER] || askGemini)(opts);
 
+const parseJson = (text) => {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+};
+
 app.post("/api/ai", requireAuth, async (req, res) => {
   const { prompt, system, json } = req.body;
   if (!prompt) return res.status(400).json({ error: "Missing prompt" });
@@ -198,155 +181,218 @@ app.post("/api/ai", requireAuth, async (req, res) => {
 });
 
 // ==========================================
-// Reports: photo -> AI triage -> safety override -> result
+// Garages
 // ==========================================
-// Body: { image: base64, mimeType?, scope: own|common|from_above, note? }
-app.post("/api/reports", requireAuth, async (req, res) => {
-  const { image, mimeType, scope, note } = req.body;
-  if (!image) return res.status(400).json({ error: "Missing photo" });
-  if (!triage.SCOPES.includes(scope)) return res.status(400).json({ error: "scope must be own, common or from_above" });
+const deviceLastSeen = new Map(); // garage id -> ISO time of the device's last poll
 
-  try {
+// Busy slots for a garage (start/end only, no renter details)
+const busySlots = (bookings) => bookings.map((b) => ({ starts_at: b.starts_at, ends_at: b.ends_at }));
+
+app.get("/api/garages", requireAuth, route(async (_req, res) => {
+  res.json({ garages: (await repo.listGarages()).map(G.publicGarage) });
+}));
+
+// The host's own garages, including the device key to flash onto the ESP32
+app.get("/api/garages/mine", requireAuth, route(async (req, res) => {
+  const garages = await repo.listGaragesByHost(req.user.id);
+  res.json({ garages: garages.map((g) => ({ ...g, device_last_seen: deviceLastSeen.get(g.id) ?? null })) });
+}));
+
+app.get("/api/garages/:id", requireAuth, route(async (req, res) => {
+  const garage = await repo.getGarage(req.params.id);
+  if (!garage) return res.status(404).json({ error: "Garage not found" });
+  const isHost = garage.host_id === req.user.id;
+  const bookings = await repo.listBookingsForGarage(garage.id);
+  res.json({
+    garage: isHost ? garage : G.publicGarage(garage),
+    busy: busySlots(bookings.filter((b) => new Date(b.ends_at) > new Date())),
+  });
+}));
+
+// Host side: list a garage. The server creates its device key.
+app.post("/api/garages", requireAuth, route(async (req, res) => {
+  const b = req.body || {};
+  const errors = [];
+  const title = String(b.title ?? "").trim();
+  const area = String(b.area ?? "").trim();
+  if (!title) errors.push("title is required");
+  if (!area) errors.push("area is required");
+  if (!G.SIZES.includes(b.size)) errors.push(`size must be one of ${G.SIZES.join(", ")}`);
+  if (!G.ACCESS.includes(b.access)) errors.push(`access must be one of ${G.ACCESS.join(", ")}`);
+  const priceHour = Number(b.price_hour);
+  const priceDay = Number(b.price_day);
+  if (!(priceHour > 0)) errors.push("price_hour must be above 0");
+  if (!(priceDay > 0)) errors.push("price_day must be above 0");
+  const lat = b.latitude == null ? null : Number(b.latitude);
+  const lng = b.longitude == null ? null : Number(b.longitude);
+  if ((lat != null && !Number.isFinite(lat)) || (lng != null && !Number.isFinite(lng))) errors.push("location is invalid");
+  if (errors.length) return res.status(400).json({ error: errors.join("; ") });
+
+  const garage = await repo.createGarage({
+    host_id: req.user.id,
+    title: title.slice(0, 120),
+    area: area.slice(0, 80),
+    address: String(b.address ?? "").trim().slice(0, 160) || null,
+    latitude: lat,
+    longitude: lng,
+    size: b.size,
+    covered: !!b.covered,
+    price_hour: priceHour,
+    price_day: priceDay,
+    access: b.access,
+    image_url: /^https?:\/\//.test(b.image_url ?? "") ? String(b.image_url).slice(0, 500) : null,
+  });
+  res.status(201).json({ garage });
+}));
+
+// Plain-language search -> AI filters -> matching garages
+// Body: { query, now_local: "YYYY-MM-DDTHH:mm", tz_offset: Date#getTimezoneOffset() }
+const searchCache = new Map(); // same question in the same hour -> same filters, no second AI call
+
+app.post("/api/garages/search", requireAuth, route(async (req, res) => {
+  const query = String(req.body?.query ?? "").trim();
+  const nowLocal = String(req.body?.now_local ?? "");
+  const tzOffset = Number(req.body?.tz_offset ?? 0);
+  if (!query) return res.status(400).json({ error: "Missing query" });
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(nowLocal)) return res.status(400).json({ error: "now_local must look like 2026-10-24T16:30" });
+
+  const cacheKey = `${query.toLowerCase()}|${nowLocal.slice(0, 13)}`;
+  let filters = searchCache.get(cacheKey);
+  if (!filters) {
     const result = await ask({
-      prompt: triage.buildPrompt(scope, note),
-      system: triage.SYSTEM_PROMPT,
+      prompt: G.buildSearchPrompt(query, nowLocal),
+      system: G.SEARCH_SYSTEM,
       json: true,
-      schema: triage.RESPONSE_SCHEMA,
-      image: { mimeType: mimeType || "image/jpeg", data: image },
+      schema: G.SEARCH_SCHEMA,
     });
     if (result.error) return res.status(result.status).json({ error: result.error });
-
-    const raw = parseJson(result.reply);
-    if (!raw) return res.status(502).json({ error: "The AI returned an unreadable answer. Try another photo." });
-
-    const aiResult = triage.applySafetyOverrides(raw, scope);
-    if (aiResult.route === "neighbor") aiResult.neighbor_message = triage.neighborMessage(aiResult);
-
-    // Only reports for the manager need the photo kept
-    const photoUrl = aiResult.route === "manager" ? await repo.uploadPhoto(req.user.id, image, mimeType || "image/jpeg") : null;
-    const report = await repo.createReport({
-      reporter_id: req.user.id,
-      scope,
-      note: note ? String(note).slice(0, 300) : null,
-      photo_url: photoUrl,
-      ai_result: aiResult,
-      route: aiResult.route,
-      status: aiResult.route === "manager" ? "sent" : "new",
-    });
-
-    res.json({ id: report.id, scope, status: report.status, ai_result: aiResult });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+    filters = parseJson(result.reply);
+    if (!filters) return res.status(502).json({ error: "The AI returned an unreadable answer. Try rephrasing." });
+    searchCache.set(cacheKey, filters);
   }
-});
 
-const parseJson = (text) => {
-  try {
-    return JSON.parse(text);
-  } catch {
-    return null;
-  }
-};
+  let fromUtc = G.localToUtc(filters.from, tzOffset);
+  let toUtc = G.localToUtc(filters.to, tzOffset);
+  if (!fromUtc || !toUtc || new Date(toUtc) <= new Date(fromUtc)) fromUtc = toUtc = null;
 
-const REPORT_STATUSES = ["new", "sent", "in_progress", "fixed"];
+  const [garages, bookings] = await Promise.all([repo.listGarages(), repo.listAllConfirmedBookings()]);
+  const matches = garages.filter(
+    (g) =>
+      G.fits(g.size, filters.vehicle_size) &&
+      (filters.covered !== true || g.covered) &&
+      (!fromUtc || !bookings.some((b) => b.garage_id === g.id && G.overlaps(b.starts_at, b.ends_at, fromUtc, toUtc)))
+  );
+  const area = G.AREAS.find((a) => a.name === filters.area);
 
-app.get("/api/reports/:id", requireAuth, async (req, res) => {
-  try {
-    const report = await repo.getReport(req.params.id);
-    if (!report) return res.status(404).json({ error: "Report not found" });
-    if (report.reporter_id !== req.user.id && (await repo.getRole(req.user.id)) !== "manager") {
-      return res.status(403).json({ error: "Not your report" });
-    }
-    res.json({ report });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.patch("/api/reports/:id/status", requireAuth, requireManager, async (req, res) => {
-  const { status } = req.body;
-  if (!REPORT_STATUSES.includes(status)) return res.status(400).json({ error: `status must be one of ${REPORT_STATUSES.join(", ")}` });
-  try {
-    const report = await repo.updateReport(req.params.id, { status });
-    if (!report) return res.status(404).json({ error: "Report not found" });
-    res.json({ report });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
+  res.json({
+    filters,
+    from_utc: fromUtc,
+    to_utc: toUtc,
+    center: area ? { latitude: area.latitude, longitude: area.longitude } : null,
+    garages: matches.map(G.publicGarage),
+  });
+}));
 
 // ==========================================
-// Домоуправител: inbox, AI action plan, building context
+// Bookings
 // ==========================================
-app.get("/api/manager/inbox", requireAuth, requireManager, async (_req, res) => {
-  try {
-    res.json({ reports: await repo.listInbox(repo.BUILDING_ID) });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+const MAX_BOOKING_DAYS = 31;
+
+// Body: { garage_id, starts_at, ends_at, mode: "hour" | "day" }. The AI never books: only this tap does.
+app.post("/api/bookings", requireAuth, route(async (req, res) => {
+  const { garage_id, starts_at, ends_at, mode } = req.body || {};
+  const garage = await repo.getGarage(garage_id);
+  if (!garage) return res.status(404).json({ error: "Garage not found" });
+  if (!G.BOOKING_MODES.includes(mode)) return res.status(400).json({ error: "mode must be hour or day" });
+
+  const start = new Date(starts_at);
+  const end = new Date(ends_at);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return res.status(400).json({ error: "Invalid dates" });
+  if (end <= start) return res.status(400).json({ error: "The end must be after the start" });
+  // A booking may start at the top of the current hour, not earlier
+  if (start < new Date(Date.now() - G.HOUR_MS)) return res.status(400).json({ error: "That time has already passed" });
+  if (end - start > MAX_BOOKING_DAYS * 24 * G.HOUR_MS) return res.status(400).json({ error: `Bookings can be at most ${MAX_BOOKING_DAYS} days` });
+
+  const existing = await repo.listBookingsForGarage(garage.id);
+  if (existing.some((b) => G.overlaps(b.starts_at, b.ends_at, start, end))) {
+    return res.status(409).json({ error: "Someone already booked part of that time. Pick another slot." });
   }
-});
 
-app.post("/api/manager/plan/:id", requireAuth, requireManager, async (req, res) => {
-  try {
-    const report = await repo.getReport(req.params.id);
-    if (!report) return res.status(404).json({ error: "Report not found" });
-    const context = await repo.getContext(report.building_id);
+  const booking = await repo.createBooking({
+    garage_id: garage.id,
+    renter_id: req.user.id,
+    starts_at: start.toISOString(),
+    ends_at: end.toISOString(),
+    mode,
+    total_price: G.priceFor(garage, start, end, mode),
+  });
+  res.status(201).json({ booking: { ...booking, garage: G.publicGarage(garage) } });
+}));
 
-    const result = await ask({
-      prompt: manager.buildManagerPrompt(report, context),
-      system: manager.MANAGER_SYSTEM,
-      json: true,
-      schema: manager.MANAGER_SCHEMA,
-    });
-    if (result.error) return res.status(result.status).json({ error: result.error });
-    const raw = parseJson(result.reply);
-    if (!raw) return res.status(502).json({ error: "The AI returned an unreadable plan. Try again." });
+app.get("/api/bookings/mine", requireAuth, route(async (req, res) => {
+  const [bookings, garages] = await Promise.all([repo.listBookingsByRenter(req.user.id), repo.listGarages()]);
+  const byId = new Map(garages.map((g) => [g.id, G.publicGarage(g)]));
+  res.json({ bookings: bookings.map((b) => ({ ...b, garage: byId.get(b.garage_id) ?? null })) });
+}));
 
-    const plan = manager.cleanPlan(raw, context);
-    const updated = await repo.updateReport(report.id, { manager_plan: plan });
-    res.json({ report: updated });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+// ==========================================
+// Door: the shared contract with the ESP32 team
+// ==========================================
+// A command nobody picked up in this time is dropped, so a door never opens long after the tap
+const COMMAND_TIMEOUT_MS = 20000;
+const isStale = (c) => Date.now() - new Date(c.created_at).getTime() > COMMAND_TIMEOUT_MS;
+
+// App -> server. Only a renter with a booking that covers right now can open the door.
+app.post("/api/garages/:id/open", requireAuth, route(async (req, res) => {
+  const garage = await repo.getGarage(req.params.id);
+  if (!garage) return res.status(404).json({ error: "Garage not found" });
+  if (garage.access !== "app") return res.status(400).json({ error: "This garage is opened by the host, not from the app" });
+
+  const booking = await repo.findActiveBooking(req.user.id, garage.id);
+  if (!booking) return res.status(403).json({ error: "You don't have a booking for this garage right now" });
+
+  const command = await repo.createCommand({ garage_id: garage.id, booking_id: booking.id, requested_by: req.user.id });
+  res.status(201).json({ command_id: command.id });
+}));
+
+// App polls this after tapping Open: { status: "queued" | "opened" | "error" }
+app.get("/api/commands/:id", requireAuth, route(async (req, res) => {
+  let command = await repo.getCommand(req.params.id);
+  if (!command || command.requested_by !== req.user.id) return res.status(404).json({ error: "Command not found" });
+  if (command.status === "queued" && isStale(command)) {
+    command = await repo.updateCommand(command.id, { status: "error", error: "The door didn't respond. Is the device online?" });
   }
-});
+  res.json({ status: command.status, acked_at: command.acked_at, error: command.error });
+}));
 
-const CONTEXT_FIELDS = [
-  "name", "address", "year", "type", "pipe_material", "valve_location_text", "valve_photo_url",
-  "panel_location_text", "contractors", "past_repairs",
-];
-
-app.get("/api/buildings/:id/context", requireAuth, async (req, res) => {
-  try {
-    res.json({ context: await repo.getContext(req.params.id) });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+// ESP32 polls every ~1 s with header X-Device-Key -> { command_id, action } | {}
+app.get("/api/device/commands", requireDevice, route(async (req, res) => {
+  const command = await repo.takeNextCommand(req.garage.id);
+  if (!command) return res.json({});
+  if (isStale(command)) {
+    await repo.updateCommand(command.id, { status: "error", error: "Expired before the device picked it up" });
+    return res.json({});
   }
-});
+  res.json({ command_id: command.id, action: command.action });
+}));
 
-app.put("/api/buildings/:id/context", requireAuth, requireManager, async (req, res) => {
-  const body = req.body || {};
-  const context = Object.fromEntries(CONTEXT_FIELDS.filter((k) => k in body).map((k) => [k, body[k]]));
-  if (context.year != null && context.year !== "" && !Number.isInteger(Number(context.year))) {
-    return res.status(400).json({ error: "year must be a whole number" });
-  }
-  if ("year" in context) context.year = context.year ? Number(context.year) : null;
-  for (const k of ["contractors", "past_repairs"]) {
-    if (k in context && !Array.isArray(context[k])) return res.status(400).json({ error: `${k} must be a list` });
-  }
-  try {
-    res.json({ context: await repo.saveContext(req.params.id, context) });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
+// ESP32 -> server: { command_id, status: "opened" | "error", error? }
+app.post("/api/device/ack", requireDevice, route(async (req, res) => {
+  const { command_id, status, error } = req.body || {};
+  if (!["opened", "error"].includes(status)) return res.status(400).json({ error: "status must be opened or error" });
+  const command = await repo.getCommand(command_id);
+  if (!command || command.garage_id !== req.garage.id) return res.status(404).json({ error: "Command not found" });
+  if (command.status !== "queued") return res.json({ ok: true }); // already acked or expired
 
-app.get("/api/specialists", requireAuth, (req, res) => {
-  const trade = req.query.trade;
-  res.json({ specialists: SPECIALISTS.filter((s) => !trade || s.trade === trade) });
-});
+  await repo.updateCommand(command.id, {
+    status,
+    acked_at: new Date().toISOString(),
+    error: status === "error" ? String(error || "The device reported an error").slice(0, 200) : null,
+  });
+  res.json({ ok: true });
+}));
 
-app.get("/api/stores", requireAuth, (req, res) => {
-  res.json({ stores: nearestStores(parseFloat(req.query.lat), parseFloat(req.query.lng)) });
+app.listen(PORT, () => {
+  console.log(`Server running on http://localhost:${PORT}`);
+  console.log(`Demo device keys (seed garages g1, g2): ${repo.SEED_KEYS.g1}, ${repo.SEED_KEYS.g2}`);
 });
-
-app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));

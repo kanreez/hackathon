@@ -1,214 +1,192 @@
-import { Ionicons } from "@expo/vector-icons";
-import { Image } from "expo-image";
-import { Redirect, router } from "expo-router";
-import { ComponentProps } from "react";
+import { router } from "expo-router";
+import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { IconTile, StickerHeadline } from "../../components/Bits";
+import { SectionTitle, StickerHeadline, Tag } from "../../components/Bits";
 import { Button } from "../../components/Button";
+import { Card } from "../../components/Card";
+import { GarageRow } from "../../components/GarageRow";
 import { Input } from "../../components/Input";
 import { ScreenWrapper } from "../../components/ScreenWrapper";
+import { EmptyState, ErrorState, Loading } from "../../components/StateViews";
 import { StepTracker } from "../../components/StepTracker";
 import { notify } from "../../components/Toast";
-import { colors, radius, shadow, spacing, typography } from "../../constants/theme";
-import { SAMPLE_RESULT } from "../../constants/sampleResult";
-import { useRole } from "../../context/RoleContext";
-import { resetFlow, setFlow, useFlow } from "../../state/reportFlow";
-import { Scope } from "../../types/triage";
-import { pickImage, takePhoto } from "../../utils/media";
+import { EXAMPLE_QUERIES, SIZE_META } from "../../constants/garages";
+import { colors, radius, spacing, typography } from "../../constants/theme";
+import { useAsync } from "../../hooks/useAsync";
+import { listGarages, searchGarages } from "../../services/garages";
+import { Garage, SearchResult } from "../../types/garage";
+import { formatRange } from "../../utils/booking";
+import { Coords, distanceKm, getCurrentLocation } from "../../utils/location";
 
-type IconName = ComponentProps<typeof Ionicons>["name"];
+// Screen 1: ask in plain language, see matching garages nearby
+export default function Find() {
+  const [query, setQuery] = useState("");
+  const [searching, setSearching] = useState(false);
+  const [result, setResult] = useState<SearchResult | null>(null);
+  const [me, setMe] = useState<Coords | null>(null);
+  const all = useAsync(listGarages);
 
-const WHERE: { value: Scope; label: string; hint: string; icon: IconName }[] = [
-  { value: "own", label: "My flat", hint: "Inside my home", icon: "home" },
-  { value: "common", label: "Building", hint: "Stairwell, roof, basement", icon: "business" },
-  { value: "from_above", label: "From above", hint: "Water from the flat over me", icon: "water" },
-];
+  // Location is optional: without it the list keeps the server's order
+  useEffect(() => {
+    getCurrentLocation().then(setMe).catch(() => {});
+  }, []);
 
-// Screen 1: photo + where is the problem
-export default function Capture() {
-  const { photo, scope, note } = useFlow();
-  const { role } = useRole();
-
-  const capture = async (source: "camera" | "library") => {
+  const search = async (text = query) => {
+    const q = text.trim();
+    if (!q) return;
+    setQuery(q);
     try {
-      const options = { base64: true, quality: 0.5 };
-      const img = source === "camera" ? await takePhoto(options) : await pickImage(options);
-      if (img) setFlow({ photo: img });
+      setSearching(true);
+      setResult(await searchGarages(q));
     } catch (e: any) {
-      notify(e?.message ?? "Could not get the photo", "error");
+      notify(e.message, "error");
+    } finally {
+      setSearching(false);
     }
   };
 
-  const analyze = () => {
-    setFlow({ result: null });
-    router.push("/processing");
-  };
+  // Distance from the area the renter asked about, else from where they are
+  const origin = result?.center ?? me;
+  const sortByDistance = (list: Garage[]) =>
+    list
+      .map((g) => ({
+        garage: g,
+        km: origin && g.latitude != null && g.longitude != null ? distanceKm(origin, { latitude: g.latitude, longitude: g.longitude }) : null,
+      }))
+      .sort((a, b) => (a.km ?? Infinity) - (b.km ?? Infinity));
 
-  // Hard-coded response: demo path that needs no AI or internet
-  const trySample = () => {
-    setFlow({ result: SAMPLE_RESULT, scope: "own" });
-    router.push("/result");
-  };
+  const open = (g: Garage) =>
+    router.push({
+      pathname: "/garage/[id]",
+      params: { id: g.id, ...(result?.from_utc && result.to_utc ? { from: result.from_utc, to: result.to_utc } : {}) },
+    });
 
-  // The first tab is the resident's; the домоуправител starts in the inbox
-  if (role === "manager") return <Redirect href="/inbox" />;
+  const shown = result ? sortByDistance(result.garages) : sortByDistance(all.data ?? []);
+  const others = result && all.data ? sortByDistance(all.data.filter((g) => !result.garages.some((m) => m.id === g.id))) : [];
 
   return (
-    <ScreenWrapper scroll>
+    <ScreenWrapper scroll refreshing={all.refreshing} onRefresh={all.refresh}>
       <StepTracker active={0} />
+      <Text style={styles.eyebrow}>Find a garage</Text>
+      <StickerHeadline lead="Park it" sticker="nearby." />
+      <Text style={styles.sub}>Say what you need. We find a garage that fits, and you open it from your phone.</Text>
 
-      <Text style={styles.eyebrow}>Report a problem</Text>
-      <StickerHeadline lead="Something" sticker="broke?" />
-      <Text style={styles.sub}>Snap it. We tell you who should fix it, and what to do right now.</Text>
-
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={photo ? "Retake photo" : "Take a photo"}
-        onPress={() => capture("camera")}
-        style={({ pressed }) => [styles.hero, pressed && { transform: [{ scale: 0.98 }] }]}
-      >
-        {photo ? (
-          <>
-            <Image source={{ uri: photo.uri }} style={StyleSheet.absoluteFill} contentFit="cover" />
-            <View style={styles.retake}>
-              <Ionicons name="camera-reverse" size={16} color={colors.ink} />
-              <Text style={styles.retakeText}>Retake</Text>
-            </View>
-          </>
-        ) : (
-          <>
-            <View style={[styles.corner, styles.tl]} />
-            <View style={[styles.corner, styles.tr]} />
-            <View style={[styles.corner, styles.bl]} />
-            <View style={[styles.corner, styles.br]} />
-            <View style={styles.shutterRing}>
-              <View style={styles.shutter}>
-                <Ionicons name="camera" size={30} color={colors.white} />
-              </View>
-            </View>
-            <Text style={styles.heroTitle}>Tap to snap the problem</Text>
-            <Text style={styles.heroHint}>Leak, crack, broken window, dead light…</Text>
-          </>
-        )}
-      </Pressable>
-      <View style={styles.photoActions}>
-        <Button title="From gallery" icon="images" size="sm" variant="secondary" onPress={() => capture("library")} />
-        {photo ? <Button title="Clear" size="sm" variant="ghost" onPress={resetFlow} /> : null}
-      </View>
-
-      <Text style={styles.section}>Where is it?</Text>
-      <View style={styles.where}>
-        {WHERE.map((w) => {
-          const selected = w.value === scope;
-          return (
-            <Pressable
-              key={w.value}
-              accessibilityRole="button"
-              accessibilityState={{ selected }}
-              onPress={() => setFlow({ scope: w.value })}
-              style={({ pressed }) => [
-                styles.whereCard,
-                selected && styles.whereSelected,
-                pressed && { transform: [{ scale: 0.97 }] },
-              ]}
-            >
-              <IconTile icon={w.icon} size={40} bg={selected ? colors.accent : colors.sand} />
-              <Text style={[styles.whereLabel, selected && { color: colors.white }]}>{w.label}</Text>
-              <Text style={[styles.whereHint, selected && { color: colors.border }]}>{w.hint}</Text>
-            </Pressable>
-          );
-        })}
-      </View>
-
-      <View style={{ marginTop: spacing.md }}>
+      <Card style={styles.ask}>
         <Input
-          value={note}
-          onChangeText={(t) => setFlow({ note: t })}
-          placeholder="Anything we should know? (optional)"
+          value={query}
+          onChangeText={setQuery}
+          placeholder="garage near Pirogov tomorrow 9 to 13, fits a Golf"
+          multiline
           maxLength={300}
+          accessibilityLabel="Describe the garage you need"
+          style={{ minHeight: 84 }}
         />
-      </View>
+        <View style={styles.examples}>
+          {EXAMPLE_QUERIES.map((q) => (
+            <Pressable
+              key={q}
+              accessibilityRole="button"
+              accessibilityLabel={`Try: ${q}`}
+              onPress={() => search(q)}
+              style={({ pressed }) => [styles.example, pressed && { transform: [{ scale: 0.97 }] }]}
+            >
+              <Text style={styles.exampleText} numberOfLines={1}>
+                {q}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+        <Button
+          title="Find garages"
+          icon="sparkles"
+          variant="accent"
+          loading={searching}
+          disabled={!query.trim()}
+          onPress={() => search()}
+        />
+      </Card>
 
-      <Button
-        title="Find out who fixes it"
-        icon="sparkles"
-        variant="accent"
-        disabled={!photo}
-        onPress={analyze}
-        style={{ marginTop: spacing.lg }}
-      />
-      {!photo ? <Text style={styles.ctaHint}>Add a photo first. It takes 5 seconds.</Text> : null}
-      <Button title="Try a sample" variant="ghost" onPress={trySample} style={{ marginTop: spacing.xs }} />
+      {result ? <Understood result={result} onClear={() => setResult(null)} /> : null}
+
+      <SectionTitle>{result ? (result.garages.length ? "Matches" : "No exact match") : "Garages near you"}</SectionTitle>
+      {all.loading && !result ? (
+        <Loading />
+      ) : all.error && !result ? (
+        <ErrorState message={all.error} onRetry={all.reload} />
+      ) : !shown.length && !result ? (
+        <EmptyState icon="car-outline" title="No garages yet" body="When hosts list garages they show up here." />
+      ) : (
+        shown.map(({ garage, km }) => <GarageRow key={garage.id} garage={garage} distanceKm={km} onPress={() => open(garage)} />)
+      )}
+
+      {result && others.length ? (
+        <>
+          <SectionTitle muted>{result.garages.length ? "Other garages" : "Closest alternatives"}</SectionTitle>
+          {others.map(({ garage, km }) => (
+            <GarageRow key={garage.id} garage={garage} distanceKm={km} onPress={() => open(garage)} />
+          ))}
+        </>
+      ) : null}
     </ScreenWrapper>
   );
 }
 
-const CORNER = 28;
+// Shows what the AI took from the request, so the renter can trust (or fix) the search
+function Understood({ result, onClear }: { result: SearchResult; onClear: () => void }) {
+  const f = result.filters;
+  const chips = [
+    f.area ? { icon: "location" as const, label: f.area } : null,
+    result.from_utc && result.to_utc ? { icon: "time" as const, label: formatRange(result.from_utc, result.to_utc) } : null,
+    f.vehicle_size ? { icon: "car" as const, label: `Fits ${SIZE_META[f.vehicle_size].hint}` } : null,
+    f.covered === true ? { icon: "umbrella" as const, label: "Covered" } : null,
+  ].filter((c) => c !== null);
+
+  return (
+    <View style={styles.understood}>
+      <View style={styles.understoodHead}>
+        <Text style={styles.eyebrowMuted}>What I understood</Text>
+        <Pressable accessibilityRole="button" onPress={onClear} hitSlop={12}>
+          <Text style={styles.clear}>Clear</Text>
+        </Pressable>
+      </View>
+      {chips.length ? (
+        <View style={styles.chips}>
+          {chips.map((c) => (
+            <Tag key={c.label} label={c.label} icon={c.icon} bg={colors.surface} />
+          ))}
+        </View>
+      ) : (
+        <Text style={styles.caption}>No filters found. Try naming an area, a time or your car.</Text>
+      )}
+    </View>
+  );
+}
 
 const styles = StyleSheet.create({
   eyebrow: { ...typography.eyebrow, color: colors.accentDeep, marginBottom: spacing.sm },
+  eyebrowMuted: { ...typography.eyebrow, color: colors.textMuted },
   sub: { ...typography.body, color: colors.textMuted, marginTop: spacing.md, marginBottom: spacing.lg },
-  hero: {
-    height: 300,
-    borderRadius: radius.xl,
-    backgroundColor: colors.accent,
-    alignItems: "center",
+  ask: { gap: spacing.md, padding: spacing.md },
+  examples: { gap: 6 },
+  example: {
+    alignSelf: "flex-start",
+    maxWidth: "100%",
+    paddingHorizontal: 12,
+    minHeight: 36,
     justifyContent: "center",
-    gap: spacing.xs,
-    overflow: "hidden",
-    ...shadow.glow,
-  },
-  corner: { position: "absolute", width: CORNER, height: CORNER, borderColor: colors.ink, opacity: 0.85 },
-  tl: { top: 22, left: 22, borderTopWidth: 3, borderLeftWidth: 3, borderTopLeftRadius: 10 },
-  tr: { top: 22, right: 22, borderTopWidth: 3, borderRightWidth: 3, borderTopRightRadius: 10 },
-  bl: { bottom: 22, left: 22, borderBottomWidth: 3, borderLeftWidth: 3, borderBottomLeftRadius: 10 },
-  br: { bottom: 22, right: 22, borderBottomWidth: 3, borderRightWidth: 3, borderBottomRightRadius: 10 },
-  shutterRing: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
-    backgroundColor: colors.accentSoft,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: spacing.md,
-  },
-  shutter: {
-    width: 84,
-    height: 84,
-    borderRadius: 42,
-    backgroundColor: colors.ink,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  heroTitle: { ...typography.h3, color: colors.ink },
-  heroHint: { ...typography.caption, color: colors.ink, opacity: 0.75 },
-  retake: {
-    position: "absolute",
-    right: spacing.md,
-    bottom: spacing.md,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 14,
-    minHeight: 40,
     borderRadius: radius.pill,
-    backgroundColor: colors.surface,
-    ...shadow.float,
+    backgroundColor: colors.sand,
   },
-  retakeText: { ...typography.label, color: colors.ink },
-  photoActions: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.md },
-  section: { ...typography.h2, color: colors.ink, marginTop: spacing.xl, marginBottom: spacing.md },
-  where: { flexDirection: "row", gap: spacing.sm },
-  whereCard: {
-    flex: 1,
-    padding: 14,
+  exampleText: { ...typography.caption, color: colors.ink },
+  understood: {
+    marginTop: spacing.md,
+    padding: spacing.md,
+    gap: spacing.sm,
     borderRadius: radius.lg,
-    backgroundColor: colors.surface,
-    gap: 4,
-    ...shadow.card,
+    backgroundColor: colors.accentSoft,
   },
-  whereSelected: { backgroundColor: colors.ink },
-  whereLabel: { ...typography.label, color: colors.ink, marginTop: spacing.sm },
-  whereHint: { ...typography.caption, color: colors.textMuted },
-  ctaHint: { ...typography.caption, color: colors.textMuted, textAlign: "center", marginTop: spacing.sm },
+  understoodHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  clear: { ...typography.label, color: colors.accentDeep, textDecorationLine: "underline" },
+  chips: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  caption: { ...typography.caption, color: colors.textMuted },
 });

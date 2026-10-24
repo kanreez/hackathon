@@ -1,4 +1,4 @@
-import { Ionicons } from "@expo/vector-icons";
+﻿import { Ionicons } from "@expo/vector-icons";
 import { StyleSheet, Text, View } from "react-native";
 import { APP_NAME } from "../constants/app";
 import { colors, typography } from "../constants/theme";
@@ -8,7 +8,7 @@ export function BrandMark() {
   return (
     <View style={styles.row}>
       <View style={styles.mark}>
-        <Ionicons name="camera" size={20} color={colors.ink} />
+        <Ionicons name="car" size={20} color={colors.ink} />
       </View>
       <Text style={styles.name}>{APP_NAME}</Text>
     </View>
