@@ -1,4 +1,4 @@
-import { router, useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams } from "expo-router";
 import { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { AvailabilityEditor } from "../../components/AvailabilityEditor";
@@ -16,6 +16,7 @@ import { useAsync } from "../../hooks/useAsync";
 import { createGarage, getGarage, updateGarage } from "../../services/garages";
 import { Access, AvailabilityWindow, Garage, GarageInput, GarageSize } from "../../types/garage";
 import { Coords, getCurrentLocation } from "../../utils/location";
+import { goBack } from "../../utils/navigation";
 
 const AREA_OPTIONS = AREAS.map((a) => ({ value: a, label: a }));
 const SIZE_OPTIONS = (Object.keys(SIZE_META) as GarageSize[]).map((s) => ({ value: s, label: `${SIZE_META[s].label} · ${SIZE_META[s].hint}` }));
@@ -39,7 +40,7 @@ export default function GarageFormScreen() {
   if (loading || error || !data) {
     return (
       <ScreenWrapper>
-        <Header eyebrow="Host" title="Edit garage" back />
+        <Header eyebrow="Host" title="Edit garage" back backTo="/host" />
         {loading ? <Loading /> : <ErrorState message={error ?? "Garage not found"} onRetry={reload} />}
       </ScreenWrapper>
     );
@@ -111,7 +112,7 @@ function GarageForm({ garage }: { garage?: Garage }) {
         await createGarage(input);
         notify(access === "app" ? "Listed. Now pair the door's device." : "Garage listed");
       }
-      router.back();
+      goBack("/host");
     } catch (e: any) {
       notify(e.message, "error");
     } finally {
@@ -121,7 +122,7 @@ function GarageForm({ garage }: { garage?: Garage }) {
 
   return (
     <ScreenWrapper scroll style={styles.page}>
-      <Header eyebrow="Host" title={garage ? "Edit garage" : "List a garage"} back />
+      <Header eyebrow="Host" title={garage ? "Edit garage" : "List a garage"} back backTo="/host" />
 
       <Card style={styles.group}>
         <Text style={styles.groupTitle}>Where</Text>

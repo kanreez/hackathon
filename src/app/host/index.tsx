@@ -36,7 +36,7 @@ export default function HostGarages() {
 
   return (
     <ScreenWrapper scroll refreshing={refreshing} onRefresh={refresh}>
-      <Header eyebrow="Host" title="Your garages" subtitle="Rent out your garage while you don't need it." back />
+      <Header eyebrow="Host" title="Your garages" subtitle="Rent out your garage while you don't need it." back backTo="/profile" />
       <Button title="List a garage" icon="add" variant="accent" onPress={() => router.push("/host/new")} />
       <View style={{ height: spacing.lg }} />
       {loading ? (

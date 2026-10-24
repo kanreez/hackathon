@@ -1,8 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
-import { router } from "expo-router";
+import { Href } from "expo-router";
 import { ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { colors, shadow, spacing, typography } from "../constants/theme";
+import { goBack } from "../utils/navigation";
 
 type Props = {
   title: string;
@@ -10,14 +11,15 @@ type Props = {
   eyebrow?: string; // small uppercase line above the title
   eyebrowColor?: string;
   back?: boolean; // show a back arrow
+  backTo?: Href; // where the arrow goes when there's no previous screen (page opened directly)
   right?: ReactNode; // e.g. an icon button or avatar
 };
 
-export function Header({ title, subtitle, eyebrow, eyebrowColor = colors.accentDeep, back, right }: Props) {
+export function Header({ title, subtitle, eyebrow, eyebrowColor = colors.accentDeep, back, backTo = "/", right }: Props) {
   return (
     <View style={styles.row}>
       <View style={styles.left}>
-        {back ? <IconButton icon="arrow-back" label="Go back" onPress={() => router.back()} /> : null}
+        {back ? <IconButton icon="arrow-back" label="Go back" onPress={() => goBack(backTo)} /> : null}
         <View style={styles.texts}>
           {eyebrow ? <Text style={[styles.eyebrow, { color: eyebrowColor }]}>{eyebrow}</Text> : null}
           <Text style={styles.title} numberOfLines={2}>
