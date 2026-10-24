@@ -57,7 +57,7 @@ const SEED_GARAGES = [
 ];
 
 function createRepo(supabase) {
-  const mem = { garages: [...SEED_GARAGES], bookings: [], commands: [] };
+  const mem = { garages: [...SEED_GARAGES], bookings: [], payments: [], commands: [] };
   const tableOk = {};
 
   // Checks once per table whether Supabase has it; falls back to memory if not
@@ -118,19 +118,59 @@ function createRepo(supabase) {
   }
 
   // ---------- bookings ----------
-  async function listBookingsForGarage(garageId) {
+  // Statuses: pending_payment (holds the slot until expires_at) -> paid | cancelled | expired
+  const LIVE = ["pending_payment", "paid"];
+
+  // Unpaid bookings past their hold become "expired". Done lazily before reads and overlap
+  // checks instead of on a timer; the database's overlap constraint relies on it.
+  async function expireStaleBookings(now = new Date()) {
+    const iso = now.toISOString();
     if (await hasTable("bookings")) {
-      return must(await supabase.from("bookings").select("*").eq("garage_id", garageId).eq("status", "confirmed"));
+      must(await supabase.from("bookings").update({ status: "expired" }).eq("status", "pending_payment").lt("expires_at", iso));
+      return;
     }
-    return mem.bookings.filter((b) => b.garage_id === garageId && b.status === "confirmed");
+    for (const b of mem.bookings) {
+      if (b.status === "pending_payment" && b.expires_at && b.expires_at < iso) b.status = "expired";
+    }
   }
 
-  async function listAllConfirmedBookings() {
-    if (await hasTable("bookings")) return must(await supabase.from("bookings").select("*").eq("status", "confirmed"));
-    return mem.bookings.filter((b) => b.status === "confirmed");
+  // Bookings that block their slot: paid, or unpaid and still held
+  async function listBookingsForGarage(garageId) {
+    await expireStaleBookings();
+    if (await hasTable("bookings")) {
+      return must(await supabase.from("bookings").select("*").eq("garage_id", garageId).in("status", LIVE));
+    }
+    return mem.bookings.filter((b) => b.garage_id === garageId && LIVE.includes(b.status));
+  }
+
+  async function listAllLiveBookings() {
+    await expireStaleBookings();
+    if (await hasTable("bookings")) return must(await supabase.from("bookings").select("*").in("status", LIVE));
+    return mem.bookings.filter((b) => LIVE.includes(b.status));
+  }
+
+  async function getBooking(id) {
+    await expireStaleBookings();
+    if (await hasTable("bookings")) return must(await supabase.from("bookings").select("*").eq("id", id).maybeSingle());
+    return mem.bookings.find((b) => b.id === id) ?? null;
+  }
+
+  async function updateBooking(id, patch) {
+    if (await hasTable("bookings")) return must(await supabase.from("bookings").update(patch).eq("id", id).select("*").maybeSingle());
+    const booking = mem.bookings.find((b) => b.id === id);
+    if (booking) Object.assign(booking, patch);
+    return booking ?? null;
+  }
+
+  // Every booking of these garages, for the host's earnings
+  async function listBookingsForGarages(garageIds) {
+    if (!garageIds.length) return [];
+    if (await hasTable("bookings")) return must(await supabase.from("bookings").select("*").in("garage_id", garageIds));
+    return mem.bookings.filter((b) => garageIds.includes(b.garage_id));
   }
 
   async function listBookingsByRenter(renterId) {
+    await expireStaleBookings();
     if (await hasTable("bookings")) {
       return must(
         await supabase.from("bookings").select("*").eq("renter_id", renterId).order("starts_at", { ascending: false })
@@ -142,14 +182,14 @@ function createRepo(supabase) {
   }
 
   async function createBooking(fields) {
-    const row = { status: "confirmed", ...fields };
+    const row = { status: "pending_payment", ...fields };
     if (await hasTable("bookings")) return must(await supabase.from("bookings").insert(row).select("*").single());
     const booking = { id: crypto.randomUUID(), created_at: new Date().toISOString(), ...row };
     mem.bookings.push(booking);
     return booking;
   }
 
-  // The renter's booking for this garage that covers "now", if any
+  // The renter's paid booking for this garage that covers "now", if any
   async function findActiveBooking(renterId, garageId, now = new Date()) {
     const iso = now.toISOString();
     if (await hasTable("bookings")) {
@@ -159,7 +199,7 @@ function createRepo(supabase) {
           .select("*")
           .eq("renter_id", renterId)
           .eq("garage_id", garageId)
-          .eq("status", "confirmed")
+          .eq("status", "paid")
           .lte("starts_at", iso)
           .gt("ends_at", iso)
           .limit(1)
@@ -171,11 +211,55 @@ function createRepo(supabase) {
         (b) =>
           b.renter_id === renterId &&
           b.garage_id === garageId &&
-          b.status === "confirmed" &&
+          b.status === "paid" &&
           new Date(b.starts_at) <= now &&
           new Date(b.ends_at) > now
       ) ?? null
     );
+  }
+
+  // ---------- payments ----------
+  async function createPayment(fields) {
+    const row = { status: "pending", currency: "EUR", ...fields };
+    if (await hasTable("payments")) return must(await supabase.from("payments").insert(row).select("*").single());
+    const now = new Date().toISOString();
+    const payment = {
+      id: crypto.randomUUID(),
+      method: null,
+      card_last4: null,
+      card_brand: null,
+      failure_message: null,
+      idempotency_key: null,
+      created_at: now,
+      updated_at: now,
+      ...row,
+    };
+    mem.payments.push(payment);
+    return payment;
+  }
+
+  async function getPayment(id) {
+    if (await hasTable("payments")) return must(await supabase.from("payments").select("*").eq("id", id).maybeSingle());
+    return mem.payments.find((p) => p.id === id) ?? null;
+  }
+
+  async function getPaymentByKey(key) {
+    if (await hasTable("payments")) return must(await supabase.from("payments").select("*").eq("idempotency_key", key).maybeSingle());
+    return mem.payments.find((p) => p.idempotency_key === key) ?? null;
+  }
+
+  async function updatePayment(id, patch) {
+    const row = { ...patch, updated_at: new Date().toISOString() };
+    if (await hasTable("payments")) return must(await supabase.from("payments").update(row).eq("id", id).select("*").maybeSingle());
+    const payment = mem.payments.find((p) => p.id === id);
+    if (payment) Object.assign(payment, row);
+    return payment ?? null;
+  }
+
+  async function listPaymentsForBookings(bookingIds) {
+    if (!bookingIds.length) return [];
+    if (await hasTable("payments")) return must(await supabase.from("payments").select("*").in("booking_id", bookingIds));
+    return mem.payments.filter((p) => bookingIds.includes(p.booking_id));
   }
 
   // ---------- door commands ----------
@@ -236,11 +320,20 @@ function createRepo(supabase) {
     listGaragesByHost,
     createGarage,
     updateGarage,
+    expireStaleBookings,
     listBookingsForGarage,
-    listAllConfirmedBookings,
+    listAllLiveBookings,
+    getBooking,
+    updateBooking,
+    listBookingsForGarages,
     listBookingsByRenter,
     createBooking,
     findActiveBooking,
+    createPayment,
+    getPayment,
+    getPaymentByKey,
+    updatePayment,
+    listPaymentsForBookings,
     createCommand,
     getCommand,
     updateCommand,

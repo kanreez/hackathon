@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { router, useLocalSearchParams } from "expo-router";
-import { ComponentProps, useState } from "react";
+import { ComponentProps, useCallback, useState } from "react";
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View, ViewStyle } from "react-native";
 import { IconTile, SectionTitle } from "../../components/Bits";
 import { Button } from "../../components/Button";
@@ -9,6 +9,7 @@ import { Card } from "../../components/Card";
 import { ChipRow } from "../../components/Chip";
 import { Header } from "../../components/Header";
 import { AppMap } from "../../components/map/AppMap";
+import { PaySheet } from "../../components/PaySheet";
 import { ScreenWrapper } from "../../components/ScreenWrapper";
 import { ErrorState, Loading } from "../../components/StateViews";
 import { StepTracker } from "../../components/StepTracker";
@@ -18,11 +19,13 @@ import { colors, radius, shadow, spacing, typography } from "../../constants/the
 import { useAsync } from "../../hooks/useAsync";
 import { useIsWide } from "../../hooks/useIsWide";
 import { createBooking, getGarage } from "../../services/garages";
-import { BookingMode, BusySlot, Garage } from "../../types/garage";
+import { cancelBooking } from "../../services/payments";
+import { BookingMode, BusySlot, Checkout, Garage } from "../../types/garage";
 import {
   addDays,
   addHours,
   DAY_MS,
+  formatCents,
   formatDay,
   formatMoney,
   formatRange,
@@ -99,6 +102,7 @@ function BookForm({ garage, busy, from, to }: { garage: Garage; busy: BusySlot[]
   const [hours, setHours] = useState(initial.hours);
   const [days, setDays] = useState(initial.days);
   const [saving, setSaving] = useState(false);
+  const [checkout, setCheckout] = useState<Checkout | null>(null);
   const wide = useIsWide();
 
   const now = new Date();
@@ -122,18 +126,34 @@ function BookForm({ garage, busy, from, to }: { garage: Garage; busy: BusySlot[]
   const outsideHours = !isAvailable(garage, start, end);
   const dayOptions = Array.from({ length: DAYS_AHEAD }, (_, i) => addDays(startOfDay(now), i));
 
+  // Confirm creates the booking unpaid (slot held 10 min) and opens the pay sheet
   const confirm = async () => {
     try {
       setSaving(true);
-      await createBooking(garage.id, start, end, mode);
-      notify(`Booked: ${formatRange(start, end)}`);
-      router.replace("/bookings");
+      setCheckout(await createBooking(garage.id, start, end, mode));
     } catch (e: any) {
       notify(e.message, "error");
     } finally {
       setSaving(false);
     }
   };
+
+  const paid = () => {
+    notify(`Paid and booked: ${formatRange(start, end)}`);
+    setCheckout(null);
+    router.replace("/bookings");
+  };
+
+  // Backed out of paying: free the slot now instead of holding it for 10 minutes
+  const closeSheet = () => {
+    if (checkout) cancelBooking(checkout.booking_id).catch(() => {});
+    setCheckout(null);
+  };
+
+  const expired = useCallback(() => {
+    setCheckout(null);
+    notify("Reservation expired. Pick the time again.", "error");
+  }, []);
 
   const app = garage.access === "app";
   const spot = garage.latitude != null && garage.longitude != null ? { latitude: garage.latitude, longitude: garage.longitude } : null;
@@ -250,9 +270,27 @@ function BookForm({ garage, busy, from, to }: { garage: Garage; busy: BusySlot[]
         style={{ marginTop: spacing.lg }}
       />
       <Text style={styles.note}>
+        You pay on the next step.{" "}
         {app ? "When your booking starts, open the door from My bookings." : "The host will let you in at the start time."}
       </Text>
     </>
+  );
+
+  // "2 h × €3 = €6", from the server's numbers once the booking exists
+  const breakdown = checkout
+    ? `${checkout.units} ${checkout.unit === "hour" ? "h" : checkout.units === 1 ? "day" : "days"} × ${formatCents(checkout.unit_price_cents)} = ${formatCents(checkout.amount_cents)}`
+    : "";
+  const sheet = (
+    <PaySheet
+      key={checkout?.booking_id ?? "closed"}
+      checkout={checkout}
+      title={garage.title}
+      range={formatRange(start, end)}
+      breakdown={breakdown}
+      onPaid={paid}
+      onClose={closeSheet}
+      onExpired={expired}
+    />
   );
 
   return (
@@ -272,6 +310,7 @@ function BookForm({ garage, busy, from, to }: { garage: Garage; busy: BusySlot[]
           {booking}
         </>
       )}
+      {sheet}
     </ScreenWrapper>
   );
 }

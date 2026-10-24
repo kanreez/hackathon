@@ -48,6 +48,9 @@ export type GarageInput = Pick<
 
 export type BusySlot = { starts_at: string; ends_at: string };
 
+// pending_payment holds the slot until expires_at; only "paid" can open the door
+export type BookingStatus = "pending_payment" | "paid" | "cancelled" | "expired";
+
 export type Booking = {
   id: string;
   garage_id: string;
@@ -56,9 +59,60 @@ export type Booking = {
   ends_at: string;
   mode: BookingMode;
   total_price: number;
-  status: "confirmed" | "cancelled";
+  amount_cents: number | null;
+  status: BookingStatus;
+  expires_at: string | null;
   created_at: string;
   garage: Garage | null;
+  payment: PaymentSummary | null;
+};
+
+// ---------- payments (mock provider on the server; amounts in euro cents) ----------
+export type PaymentStatus = "pending" | "succeeded" | "declined" | "requires_action" | "refunded";
+
+export type PaymentSummary = {
+  id: string;
+  status: PaymentStatus;
+  amount_cents: number;
+  currency: string;
+  method: "card" | "wallet" | null;
+  card_last4: string | null;
+  card_brand: string | null;
+};
+
+// What POST /api/bookings returns: an unpaid booking and the payment to confirm
+export type Checkout = {
+  booking_id: string;
+  payment_id: string;
+  amount_cents: number;
+  platform_fee_cents: number;
+  currency: string;
+  expires_at: string;
+  units: number;
+  unit: "hour" | "day";
+  unit_price_cents: number;
+};
+
+export type PayResult = {
+  status: "succeeded" | "declined" | "requires_action";
+  message?: string;
+  card_last4?: string;
+  card_brand?: string;
+  method?: "card" | "wallet";
+};
+
+export type Earnings = {
+  total_payout_cents: number;
+  currency: string;
+  bookings: {
+    booking_id: string;
+    garage_id: string;
+    garage_title: string;
+    starts_at: string;
+    ends_at: string;
+    amount_cents: number;
+    host_payout_cents: number;
+  }[];
 };
 
 // What the AI understood from the plain-language request

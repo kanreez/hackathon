@@ -12,17 +12,21 @@ import { colors, radius, spacing, typography } from "../../constants/theme";
 import { useAsync } from "../../hooks/useAsync";
 import { useRefreshOnFocus } from "../../hooks/useRefreshOnFocus";
 import { myGarages } from "../../services/garages";
-import { Garage } from "../../types/garage";
+import { hostEarnings } from "../../services/payments";
+import { Earnings, Garage } from "../../types/garage";
 import { summarizeAvailability } from "../../utils/availability";
-import { formatDuration } from "../../utils/booking";
+import { formatCents, formatDuration } from "../../utils/booking";
 
 const ONLINE_MS = 10000; // the ESP32 polls every second, so 10 s of silence means it's offline
+const PLATFORM_FEE_RATE = 0.15; // same as server/payments/pricing.js; display only
 
 // Host side: your listed garages, and the device key to flash onto each garage's ESP32
 export default function HostGarages() {
   const { data, loading, refreshing, error, reload, refresh, setData } = useAsync(myGarages);
+  const earnings = useAsync(hostEarnings);
 
   useRefreshOnFocus(refresh);
+  useRefreshOnFocus(earnings.refresh);
 
   // Refresh "device online" while the host is pairing
   useEffect(() => {
@@ -37,6 +41,7 @@ export default function HostGarages() {
   return (
     <ScreenWrapper scroll refreshing={refreshing} onRefresh={refresh} style={styles.page}>
       <Header eyebrow="Host" title="Your garages" subtitle="Rent out your garage while you don't need it." back backTo="/profile" />
+      {garages.length && earnings.data ? <EarningsCard earnings={earnings.data} /> : null}
       <Button title="List a garage" icon="add" variant="accent" onPress={() => router.push("/host/new")} />
       <View style={{ height: spacing.lg }} />
       {loading ? (
@@ -55,6 +60,24 @@ export default function HostGarages() {
         ))
       )}
     </ScreenWrapper>
+  );
+}
+
+// What the host has earned: paid bookings after the platform fee, refunds excluded
+function EarningsCard({ earnings }: { earnings: Earnings }) {
+  const count = earnings.bookings.length;
+  return (
+    <Card style={styles.earnings}>
+      <IconTile icon="cash" size={44} bg={colors.successSoft} color={colors.success} />
+      <View style={{ flex: 1 }}>
+        <Text style={styles.caption}>Earnings</Text>
+        <Text style={styles.earningsValue}>{formatCents(earnings.total_payout_cents)}</Text>
+      </View>
+      <Text style={styles.caption}>
+        {count} paid {count === 1 ? "booking" : "bookings"}
+        {"\n"}after {Math.round(PLATFORM_FEE_RATE * 100)}% fee
+      </Text>
+    </Card>
   );
 }
 
@@ -86,6 +109,8 @@ function PairDevice({ garage }: { garage: Garage }) {
 
 const styles = StyleSheet.create({
   page: { maxWidth: 760, width: "100%", alignSelf: "center" },
+  earnings: { flexDirection: "row", alignItems: "center", gap: spacing.md, marginBottom: spacing.md },
+  earningsValue: { ...typography.h1, color: colors.ink },
   pair: { gap: spacing.sm, marginTop: -spacing.xs, backgroundColor: colors.sand },
   pairHead: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
   pairTitle: { ...typography.h3, color: colors.ink, flex: 1 },

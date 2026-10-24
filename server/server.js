@@ -7,6 +7,8 @@ const { createClient } = require("@supabase/supabase-js");
 const { askAnthropic } = require("./anthropic");
 const G = require("./garages");
 const { createRepo } = require("./repo");
+const { createPaymentProvider, PaymentError } = require("./payments/provider");
+const { computePrice } = require("./payments/pricing");
 
 const missing = ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"].filter((k) => !process.env[k]);
 if (missing.length) {
@@ -26,6 +28,7 @@ const supabase = createClient(
 );
 
 const repo = createRepo(supabase);
+const payments = createPaymentProvider(repo);
 
 app.use(cors());
 app.use(express.json());
@@ -55,8 +58,9 @@ async function requireDevice(req, res, next) {
   }
 }
 
-// Wraps a route so thrown errors become a 500 with the message
-const route = (fn) => (req, res) => fn(req, res).catch((err) => res.status(500).json({ error: err.message }));
+// Wraps a route so thrown errors become a 500 with the message (a PaymentError keeps its own status)
+const route = (fn) => (req, res) =>
+  fn(req, res).catch((err) => res.status(err instanceof PaymentError ? err.status : 500).json({ error: err.message }));
 
 app.get("/", (_req, res) => res.json({ status: "ok" }));
 
@@ -299,7 +303,7 @@ app.post("/api/garages/search", requireAuth, route(async (req, res) => {
   let toUtc = G.localToUtc(filters.to, tzOffset, timeZone);
   if (!fromUtc || !toUtc || new Date(toUtc) <= new Date(fromUtc)) fromUtc = toUtc = null;
 
-  const [garages, bookings] = await Promise.all([repo.listGarages(), repo.listAllConfirmedBookings()]);
+  const [garages, bookings] = await Promise.all([repo.listGarages(), repo.listAllLiveBookings()]);
   const matches = garages.filter(
     (g) =>
       G.fits(g.size, filters.vehicle_size) &&
@@ -322,8 +326,11 @@ app.post("/api/garages/search", requireAuth, route(async (req, res) => {
 // Bookings
 // ==========================================
 const MAX_BOOKING_DAYS = 31;
+const HOLD_MS = 10 * 60000; // an unpaid booking holds its slot this long
 
 // Body: { garage_id, starts_at, ends_at, mode: "hour" | "day" }. The AI never books: only this tap does.
+// Creates the booking unpaid plus its payment; the app then opens the pay sheet. Any amount the
+// app sends is ignored: the price comes from the garage's prices (payments/pricing.js).
 app.post("/api/bookings", requireAuth, route(async (req, res) => {
   const { garage_id, starts_at, ends_at, mode } = req.body || {};
   const garage = await repo.getGarage(garage_id);
@@ -347,21 +354,176 @@ app.post("/api/bookings", requireAuth, route(async (req, res) => {
     return res.status(409).json({ error: "Someone already booked part of that time. Pick another slot." });
   }
 
-  const booking = await repo.createBooking({
-    garage_id: garage.id,
-    renter_id: req.user.id,
-    starts_at: start.toISOString(),
-    ends_at: end.toISOString(),
-    mode,
-    total_price: G.priceFor(garage, start, end, mode),
+  const price = computePrice(garage, start, end, mode);
+  let booking;
+  try {
+    booking = await repo.createBooking({
+      garage_id: garage.id,
+      renter_id: req.user.id,
+      starts_at: start.toISOString(),
+      ends_at: end.toISOString(),
+      mode,
+      total_price: price.amount_cents / 100,
+      amount_cents: price.amount_cents,
+      expires_at: new Date(Date.now() + HOLD_MS).toISOString(),
+    });
+  } catch (err) {
+    // Two taps raced for the same slot: the database's overlap constraint stopped the second
+    if (/bookings_no_overlap|exclusion/i.test(err.message)) {
+      return res.status(409).json({ error: "Someone already booked part of that time. Pick another slot." });
+    }
+    throw err;
+  }
+  const payment = await payments.createPayment({
+    bookingId: booking.id,
+    userId: req.user.id,
+    amountCents: price.amount_cents,
+    platformFeeCents: price.platform_fee_cents,
+    hostPayoutCents: price.host_payout_cents,
+    currency: price.currency,
   });
-  res.status(201).json({ booking: { ...booking, garage: G.publicGarage(garage) } });
+
+  res.status(201).json({
+    booking_id: booking.id,
+    payment_id: payment.id,
+    amount_cents: price.amount_cents,
+    platform_fee_cents: price.platform_fee_cents,
+    currency: price.currency,
+    expires_at: booking.expires_at,
+    units: price.units,
+    unit: price.unit,
+    unit_price_cents: price.unit_price_cents,
+  });
 }));
+
+// What the renter sees of a payment: never the card beyond its last 4 digits
+const paymentSummary = (p) =>
+  p && {
+    id: p.id,
+    status: p.status,
+    amount_cents: p.amount_cents,
+    currency: p.currency,
+    method: p.method,
+    card_last4: p.card_last4,
+    card_brand: p.card_brand,
+  };
 
 app.get("/api/bookings/mine", requireAuth, route(async (req, res) => {
   const [bookings, garages] = await Promise.all([repo.listBookingsByRenter(req.user.id), repo.listGarages()]);
+  const pays = await repo.listPaymentsForBookings(bookings.map((b) => b.id));
   const byId = new Map(garages.map((g) => [g.id, G.publicGarage(g)]));
-  res.json({ bookings: bookings.map((b) => ({ ...b, garage: byId.get(b.garage_id) ?? null })) });
+  const payByBooking = new Map(pays.map((p) => [p.booking_id, p]));
+  res.json({
+    bookings: bookings.map((b) => ({
+      ...b,
+      garage: byId.get(b.garage_id) ?? null,
+      payment: paymentSummary(payByBooking.get(b.id)) ?? null,
+    })),
+  });
+}));
+
+// Renter cancels. Paid and not started yet -> cancelled and refunded. Unpaid (e.g. the pay
+// sheet was closed) -> cancelled, which frees the slot. Paid and already started -> 409.
+app.post("/api/bookings/:id/cancel", requireAuth, route(async (req, res) => {
+  const booking = await repo.getBooking(req.params.id);
+  if (!booking) return res.status(404).json({ error: "Booking not found" });
+  if (booking.renter_id !== req.user.id) return res.status(403).json({ error: "This isn't your booking" });
+  if (booking.status === "cancelled") return res.status(409).json({ error: "This booking is already cancelled" });
+  if (booking.status === "expired") return res.status(409).json({ error: "This reservation already expired" });
+
+  const [payment] = await repo.listPaymentsForBookings([booking.id]);
+  let refundedCents = 0;
+  if (booking.status === "paid") {
+    if (new Date(booking.starts_at) <= new Date()) {
+      return res.status(409).json({ error: "This booking has already started, so it can't be cancelled" });
+    }
+    if (payment?.status === "succeeded") {
+      await payments.refundPayment({ paymentId: payment.id });
+      refundedCents = payment.amount_cents;
+    }
+  }
+  await repo.updateBooking(booking.id, { status: "cancelled" });
+  res.json({ status: "cancelled", refund: refundedCents > 0, refunded_cents: refundedCents });
+}));
+
+// ==========================================
+// Payments (mock by default: see payments/provider.js)
+// ==========================================
+async function ownPayment(req, res) {
+  const payment = await repo.getPayment(req.params.id);
+  if (!payment) {
+    res.status(404).json({ error: "Payment not found" });
+    return null;
+  }
+  if (payment.user_id !== req.user.id) {
+    res.status(403).json({ error: "This isn't your payment" });
+    return null;
+  }
+  return payment;
+}
+
+// Body: { card_number?, wallet?: true, idempotency_key, action_confirmed? }
+// -> { status: "succeeded" | "declined" | "requires_action", message?, card_last4?, card_brand?, method? }
+// The card number is only passed to the provider to decide the outcome; it's never stored or logged.
+app.post("/api/payments/:id/confirm", requireAuth, route(async (req, res) => {
+  const payment = await ownPayment(req, res);
+  if (!payment) return;
+  const { card_number, wallet, idempotency_key, action_confirmed } = req.body || {};
+  const key = String(idempotency_key ?? "");
+  if (!/^[\w-]{8,100}$/.test(key)) return res.status(400).json({ error: "idempotency_key is required" });
+  if (!wallet && !action_confirmed && !card_number) return res.status(400).json({ error: "Enter a card number or use the demo wallet" });
+
+  const booking = await repo.getBooking(payment.booking_id);
+  if (!booking) return res.status(404).json({ error: "Booking not found" });
+  if (booking.status === "expired") return res.status(409).json({ error: "Reservation expired. Book the slot again." });
+  if (booking.status === "cancelled") return res.status(409).json({ error: "This booking was cancelled" });
+
+  const result = await payments.confirmPayment({
+    paymentId: payment.id,
+    cardNumber: card_number,
+    wallet: wallet === true,
+    idempotencyKey: key,
+    actionConfirmed: action_confirmed === true,
+  });
+  if (result.status === "succeeded" && booking.status !== "paid") {
+    await repo.updateBooking(booking.id, { status: "paid", expires_at: null });
+  }
+  res.json(result);
+}));
+
+app.get("/api/payments/:id", requireAuth, route(async (req, res) => {
+  const payment = await ownPayment(req, res);
+  if (payment) res.json(paymentSummary(payment));
+}));
+
+// Host side: what the host earned from their garages (after the platform fee, refunds excluded)
+app.get("/api/host/earnings", requireAuth, route(async (req, res) => {
+  const garages = await repo.listGaragesByHost(req.user.id);
+  const bookings = await repo.listBookingsForGarages(garages.map((g) => g.id));
+  const pays = (await repo.listPaymentsForBookings(bookings.map((b) => b.id))).filter((p) => p.status === "succeeded");
+  const bookingById = new Map(bookings.map((b) => [b.id, b]));
+  const garageById = new Map(garages.map((g) => [g.id, g]));
+
+  const rows = pays
+    .map((p) => {
+      const b = bookingById.get(p.booking_id);
+      return {
+        booking_id: b.id,
+        garage_id: b.garage_id,
+        garage_title: garageById.get(b.garage_id)?.title ?? "Garage",
+        starts_at: b.starts_at,
+        ends_at: b.ends_at,
+        amount_cents: p.amount_cents,
+        host_payout_cents: p.host_payout_cents,
+      };
+    })
+    .sort((a, b) => new Date(b.starts_at) - new Date(a.starts_at));
+
+  res.json({
+    total_payout_cents: rows.reduce((sum, r) => sum + r.host_payout_cents, 0),
+    currency: "EUR",
+    bookings: rows,
+  });
 }));
 
 // ==========================================
@@ -371,14 +533,14 @@ app.get("/api/bookings/mine", requireAuth, route(async (req, res) => {
 const COMMAND_TIMEOUT_MS = 20000;
 const isStale = (c) => Date.now() - new Date(c.created_at).getTime() > COMMAND_TIMEOUT_MS;
 
-// App -> server. Only a renter with a booking that covers right now can open the door.
+// App -> server. Only a renter with a paid booking that covers right now can open the door.
 app.post("/api/garages/:id/open", requireAuth, route(async (req, res) => {
   const garage = await repo.getGarage(req.params.id);
   if (!garage) return res.status(404).json({ error: "Garage not found" });
   if (garage.access !== "app") return res.status(400).json({ error: "This garage is opened by the host, not from the app" });
 
   const booking = await repo.findActiveBooking(req.user.id, garage.id);
-  if (!booking) return res.status(403).json({ error: "You don't have a booking for this garage right now" });
+  if (!booking) return res.status(403).json({ error: "No paid active booking for this garage" });
 
   const command = await repo.createCommand({ garage_id: garage.id, booking_id: booking.id, requested_by: req.user.id });
   res.status(201).json({ command_id: command.id });
@@ -423,5 +585,6 @@ app.post("/api/device/ack", requireDevice, route(async (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
+  console.log(`Payments: ${payments.name}${payments.name === "mock" ? " (fake checkout, test cards in payments/mock.js)" : ""}`);
   console.log(`Demo device keys (seed garages g1, g2): ${repo.SEED_KEYS.g1}, ${repo.SEED_KEYS.g2}`);
 });

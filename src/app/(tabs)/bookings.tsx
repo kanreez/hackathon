@@ -12,8 +12,9 @@ import { colors, radius, spacing, typography } from "../../constants/theme";
 import { useAsync } from "../../hooks/useAsync";
 import { useRefreshOnFocus } from "../../hooks/useRefreshOnFocus";
 import { getCommand, myBookings, openGarage } from "../../services/garages";
+import { cancelBooking } from "../../services/payments";
 import { Booking } from "../../types/garage";
-import { formatDuration, formatMoney, formatRange, formatTime } from "../../utils/booking";
+import { formatCents, formatDuration, formatRange, formatTime } from "../../utils/booking";
 
 const POLL_MS = 1000;
 const GIVE_UP_MS = 30000; // the server already fails a command after 20 s; this is a safety net
@@ -32,11 +33,14 @@ export default function Bookings() {
   }, []);
 
   const bookings = data ?? [];
-  const active = bookings.filter((b) => new Date(b.starts_at) <= now && new Date(b.ends_at) > now);
+  const closed = (b: Booking) => b.status === "cancelled" || b.status === "expired";
+  // Only a paid booking is active: that's the one the door opens for
+  const isActive = (b: Booking) => b.status === "paid" && new Date(b.starts_at) <= now && new Date(b.ends_at) > now;
+  const active = bookings.filter(isActive);
   const upcoming = bookings
-    .filter((b) => new Date(b.starts_at) > now)
+    .filter((b) => !closed(b) && !isActive(b) && new Date(b.ends_at) > now)
     .sort((a, b) => new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime());
-  const past = bookings.filter((b) => new Date(b.ends_at) <= now);
+  const past = bookings.filter((b) => closed(b) || new Date(b.ends_at) <= now);
 
   return (
     <ScreenWrapper scroll refreshing={refreshing} onRefresh={refresh} style={styles.page}>
@@ -63,7 +67,13 @@ export default function Bookings() {
             <>
               <SectionTitle>Upcoming</SectionTitle>
               {upcoming.map((b) => (
-                <BookingRow key={b.id} booking={b} note={`Starts in ${formatDuration(new Date(b.starts_at).getTime() - now.getTime())}`} />
+                <BookingRow
+                  key={b.id}
+                  booking={b}
+                  note={new Date(b.starts_at) > now ? `Starts in ${formatDuration(new Date(b.starts_at).getTime() - now.getTime())}` : undefined}
+                  now={now}
+                  onChanged={refresh}
+                />
               ))}
             </>
           ) : null}
@@ -72,7 +82,7 @@ export default function Bookings() {
             <>
               <SectionTitle muted>Past</SectionTitle>
               {past.map((b) => (
-                <BookingRow key={b.id} booking={b} muted />
+                <BookingRow key={b.id} booking={b} now={now} muted />
               ))}
             </>
           ) : null}
@@ -134,6 +144,9 @@ function ActiveBooking({ booking, now }: { booking: Booking; now: Date }) {
       <Text style={styles.caption}>
         {[g?.area, g?.address].filter(Boolean).join(" · ")} · until {formatTime(new Date(booking.ends_at))}
       </Text>
+      <Text style={styles.paidLine}>
+        Paid {formatCents(amountOf(booking))} · {paidWith(booking)}
+      </Text>
 
       {app ? (
         <>
@@ -184,19 +197,83 @@ function DoorStatus({ door }: { door: Door }) {
   );
 }
 
-function BookingRow({ booking, note, muted }: { booking: Booking; note?: string; muted?: boolean }) {
+const amountOf = (b: Booking) => b.amount_cents ?? Math.round(b.total_price * 100);
+
+const paidWith = (b: Booking) =>
+  b.payment?.method === "wallet"
+    ? "Demo wallet"
+    : b.payment?.card_last4
+      ? `${b.payment.card_brand ?? "Card"} •••• ${b.payment.card_last4}`
+      : "Card";
+
+// Status chip for a booking row: Paid / Refunded / Cancelled / Expired / Not paid
+function statusTag(b: Booking): { label: string; bg: string; color: string } {
+  if (b.status === "paid") return { label: "Paid", bg: colors.successSoft, color: colors.success };
+  if (b.status === "cancelled" && b.payment?.status === "refunded") return { label: "Refunded", bg: colors.accentSoft, color: colors.accentDeep };
+  if (b.status === "cancelled") return { label: "Cancelled", bg: colors.sand, color: colors.textMuted };
+  if (b.status === "expired") return { label: "Expired", bg: colors.sand, color: colors.textMuted };
+  return { label: "Not paid", bg: colors.errorSoft, color: colors.error };
+}
+
+type RowProps = { booking: Booking; now: Date; note?: string; muted?: boolean; onChanged?: () => void };
+
+function BookingRow({ booking, now, note, muted, onChanged }: RowProps) {
   const g = booking.garage;
+  const [confirming, setConfirming] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const tag = statusTag(booking);
+  const amount = amountOf(booking);
+  // Paid: cancel (and refund) only before it starts. Unpaid: cancel any time to free the slot.
+  const canCancel =
+    !!onChanged && (booking.status === "pending_payment" || (booking.status === "paid" && new Date(booking.starts_at) > now));
+
+  const cancel = async () => {
+    try {
+      setCancelling(true);
+      const r = await cancelBooking(booking.id);
+      notify(r.refund ? `Cancelled. Refunded ${formatCents(r.refunded_cents)}` : "Booking cancelled");
+      onChanged?.();
+    } catch (e: any) {
+      notify(e.message, "error");
+    } finally {
+      setCancelling(false);
+      setConfirming(false);
+    }
+  };
+
   return (
-    <Card style={[styles.row, muted && { opacity: 0.7 }]}>
-      <IconTile icon={g?.access === "app" ? "phone-portrait" : "key"} size={44} />
-      <View style={{ flex: 1, gap: 2 }}>
-        <Text style={styles.rowTitle} numberOfLines={1}>
-          {g?.title ?? "Garage"}
-        </Text>
-        <Text style={styles.caption}>{formatRange(booking.starts_at, booking.ends_at)}</Text>
-        {note ? <Text style={styles.note}>{note}</Text> : null}
+    <Card style={[styles.rowCard, muted && { opacity: 0.7 }]}>
+      <View style={styles.row}>
+        <IconTile icon={g?.access === "app" ? "phone-portrait" : "key"} size={44} />
+        <View style={{ flex: 1, gap: 2 }}>
+          <Text style={styles.rowTitle} numberOfLines={1}>
+            {g?.title ?? "Garage"}
+          </Text>
+          <Text style={styles.caption}>{formatRange(booking.starts_at, booking.ends_at)}</Text>
+          <View style={styles.tagRow}>
+            <Tag label={tag.label} bg={tag.bg} color={tag.color} />
+            {booking.payment && booking.status !== "pending_payment" && booking.status !== "expired" ? (
+              <Text style={styles.caption}>{paidWith(booking)}</Text>
+            ) : null}
+          </View>
+          {note ? <Text style={styles.note}>{note}</Text> : null}
+        </View>
+        <Text style={[styles.price, booking.status === "cancelled" && styles.struck]}>{formatCents(amount)}</Text>
       </View>
-      <Text style={styles.price}>{formatMoney(booking.total_price)}</Text>
+
+      {canCancel ? (
+        confirming ? (
+          <View style={styles.confirmRow}>
+            <Text style={[styles.caption, { flex: 1 }]}>
+              {booking.status === "paid" ? `Cancel and refund ${formatCents(amount)}?` : "Cancel and free this slot?"}
+            </Text>
+            <Button title="Keep" size="sm" variant="ghost" disabled={cancelling} onPress={() => setConfirming(false)} />
+            <Button title="Cancel booking" size="sm" variant="danger" loading={cancelling} onPress={cancel} />
+          </View>
+        ) : (
+          <Button title="Cancel booking" size="sm" variant="ghost" icon="close-circle" onPress={() => setConfirming(true)} style={styles.cancelBtn} />
+        )
+      ) : null}
     </Card>
   );
 }
@@ -229,8 +306,14 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     backgroundColor: colors.sand,
   },
-  row: { flexDirection: "row", alignItems: "center", gap: spacing.md, marginBottom: spacing.sm },
+  rowCard: { marginBottom: spacing.sm, gap: spacing.sm },
+  row: { flexDirection: "row", alignItems: "center", gap: spacing.md },
   rowTitle: { ...typography.h3, color: colors.ink },
+  tagRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, flexWrap: "wrap", marginTop: 2 },
   note: { ...typography.label, color: colors.accentDeep },
   price: { ...typography.h3, color: colors.ink },
+  struck: { textDecorationLine: "line-through", color: colors.textMuted },
+  paidLine: { ...typography.label, color: colors.success },
+  confirmRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, flexWrap: "wrap" },
+  cancelBtn: { alignSelf: "flex-start" },
 });

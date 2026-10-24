@@ -30,7 +30,8 @@ export const addDays = (d: Date, n: number) => {
   return x;
 };
 
-// Same formula as server/garages.js: started hours / days are charged in full
+// Same formula as server/payments/pricing.js: started hours / days are charged in full.
+// Display only: the server computes the amount that is actually charged.
 export function priceFor(garage: Pick<Garage, "price_hour" | "price_day">, start: Date, end: Date, mode: BookingMode) {
   const hours = (end.getTime() - start.getTime()) / HOUR_MS;
   // The small allowance keeps a 25-hour day at a clock change from counting as two
@@ -39,6 +40,9 @@ export function priceFor(garage: Pick<Garage, "price_hour" | "price_day">, start
 }
 
 export const formatMoney = (n: number) => `€${Number.isInteger(n) ? n : n.toFixed(2)}`;
+
+// Payments are integer cents: 850 -> "€8.50", 800 -> "€8"
+export const formatCents = (cents: number) => formatMoney(cents / 100);
 
 export const formatTime = (d: Date) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 

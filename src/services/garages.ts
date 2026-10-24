@@ -1,4 +1,4 @@
-import { Booking, BookingMode, BusySlot, Command, Garage, GarageInput, SearchResult } from "../types/garage";
+import { Booking, BookingMode, BusySlot, Checkout, Command, Garage, GarageInput, SearchResult } from "../types/garage";
 import { toLocalIso } from "../utils/booking";
 import { api } from "./api";
 
@@ -39,14 +39,15 @@ export async function updateGarage(id: string, input: GarageInput) {
   return (await api.patch<{ garage: Garage }>(`/api/garages/${id}`, input)).garage;
 }
 
+// Creates the booking unpaid (it holds the slot for 10 minutes) and its payment. The server
+// sets the price; pay with confirmPayment() from services/payments.ts.
 export async function createBooking(garageId: string, startsAt: Date, endsAt: Date, mode: BookingMode) {
-  const res = await api.post<{ booking: Booking }>("/api/bookings", {
+  return api.post<Checkout>("/api/bookings", {
     garage_id: garageId,
     starts_at: startsAt.toISOString(),
     ends_at: endsAt.toISOString(),
     mode,
   });
-  return res.booking;
 }
 
 export async function myBookings() {

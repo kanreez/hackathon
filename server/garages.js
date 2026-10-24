@@ -1,4 +1,5 @@
-// Garage domain rules shared by the endpoints: sizes, prices, areas and the AI search prompt.
+// Garage domain rules shared by the endpoints: sizes, areas, free hours and the AI search prompt.
+// Prices live in payments/pricing.js.
 // The server is the only authority on prices and on whether a booking is active.
 
 const SIZES = ["small", "medium", "large"]; // small = city car, medium = Golf / sedan, large = SUV / van
@@ -20,14 +21,6 @@ const AREAS = [
 const fits = (garageSize, vehicleSize) => !vehicleSize || SIZES.indexOf(garageSize) >= SIZES.indexOf(vehicleSize);
 
 const overlaps = (aStart, aEnd, bStart, bEnd) => new Date(aStart) < new Date(bEnd) && new Date(bStart) < new Date(aEnd);
-
-// Same formula as src/utils/booking.ts: started hours / days are charged in full
-function priceFor(garage, startsAt, endsAt, mode) {
-  const hours = (new Date(endsAt) - new Date(startsAt)) / HOUR_MS;
-  // The small allowance keeps a 25-hour day at a clock change from counting as two
-  if (mode === "day") return Math.max(1, Math.ceil(hours / 24 - 0.05)) * Number(garage.price_day);
-  return Math.ceil(hours) * Number(garage.price_hour);
-}
 
 // Every area is in Sofia, so availability hours are Sofia wall-clock time
 const GARAGE_TZ = "Europe/Sofia";
@@ -158,7 +151,6 @@ module.exports = {
   HOUR_MS,
   fits,
   overlaps,
-  priceFor,
   GARAGE_TZ,
   DESCRIPTION_MAX,
   normalizeAvailability,
