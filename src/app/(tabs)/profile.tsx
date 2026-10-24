@@ -9,6 +9,7 @@ import { Loading } from "../../components/StateViews";
 import { notify } from "../../components/Toast";
 import { colors, radius, spacing, typography } from "../../constants/theme";
 import { useAuth } from "../../context/AuthContext";
+import { useRole } from "../../context/RoleContext";
 import { useAsync } from "../../hooks/useAsync";
 import { uploadImage } from "../../services/storage";
 import { supabase } from "../../services/supabase";
@@ -17,6 +18,8 @@ import { pickImage } from "../../utils/media";
 
 export default function Profile() {
   const { user, logout } = useAuth();
+  const { role, canSwitch, setRole } = useRole();
+  const [switching, setSwitching] = useState(false);
   const { data: profile, loading, error, setData } = useAsync(
     () => (user ? getProfile(user.id) : Promise.resolve(null)),
     [user?.id]
@@ -69,6 +72,17 @@ export default function Profile() {
       notify(e.message, "error");
     } finally {
       setUploading(false);
+    }
+  };
+
+  const toggleRole = async () => {
+    try {
+      setSwitching(true);
+      await setRole(role === "manager" ? "resident" : "manager");
+    } catch (e: any) {
+      notify(e.message, "error");
+    } finally {
+      setSwitching(false);
     }
   };
 
@@ -129,6 +143,22 @@ export default function Profile() {
           <Button title="Save profile" loading={saving} onPress={save} />
         </View>
       )}
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Role</Text>
+        <Text style={styles.email}>
+          You are using the app as {role === "manager" ? "the building manager (домоуправител)" : "a resident"}.
+        </Text>
+        {canSwitch ? (
+          <Button
+            title={role === "manager" ? "Switch to resident" : "Switch to building manager"}
+            icon="swap-horizontal"
+            variant="secondary"
+            loading={switching}
+            onPress={toggleRole}
+          />
+        ) : null}
+      </View>
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Account</Text>

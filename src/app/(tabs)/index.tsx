@@ -1,174 +1,141 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
-import { router } from "expo-router";
-import { useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
-import { Avatar } from "../../components/Avatar";
+import { Redirect, router } from "expo-router";
+import { ComponentProps } from "react";
+import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { Button } from "../../components/Button";
-import { formatPrice, ItemRow } from "../../components/ItemRow";
 import { ScreenWrapper } from "../../components/ScreenWrapper";
-import { ErrorState, Loading } from "../../components/StateViews";
+import { notify } from "../../components/Toast";
 import { colors, radius, spacing, typography } from "../../constants/theme";
-import { useAuth } from "../../context/AuthContext";
-import { useAsync } from "../../hooks/useAsync";
-import { useRefreshOnFocus } from "../../hooks/useRefreshOnFocus";
-import { listItems } from "../../services/items";
+import { SAMPLE_RESULT } from "../../constants/sampleResult";
+import { useRole } from "../../context/RoleContext";
+import { resetFlow, setFlow, useFlow } from "../../state/reportFlow";
+import { Scope } from "../../types/triage";
+import { pickImage, takePhoto } from "../../utils/media";
 
-export default function Home() {
-  const { user } = useAuth();
-  const { data: items, loading, refreshing, error, reload, refresh } = useAsync(listItems);
-  const [question, setQuestion] = useState("");
+type IconName = ComponentProps<typeof Ionicons>["name"];
 
-  // Reload when coming back to this tab (e.g. after adding an item)
-  useRefreshOnFocus(refresh);
+const WHERE: { value: Scope; label: string; hint: string; icon: IconName }[] = [
+  { value: "own", label: "My flat", hint: "Inside my home", icon: "home" },
+  { value: "common", label: "Building", hint: "Stairwell, roof, basement", icon: "business" },
+  { value: "from_above", label: "From above", hint: "Water from the flat over me", icon: "water" },
+];
 
-  const fullName: string = user?.user_metadata?.full_name || user?.email?.split("@")[0] || "there";
-  const firstName = fullName.split(" ")[0];
+// Screen 1: photo + where is the problem
+export default function Capture() {
+  const { photo, scope, note } = useFlow();
+  const { role } = useRole();
 
-  const ask = () => {
-    const q = question.trim();
-    if (!q) return;
-    setQuestion("");
-    router.push({ pathname: "/ai", params: { q } });
+  const capture = async (source: "camera" | "library") => {
+    try {
+      const options = { base64: true, quality: 0.5 };
+      const img = source === "camera" ? await takePhoto(options) : await pickImage(options);
+      if (img) setFlow({ photo: img });
+    } catch (e: any) {
+      notify(e?.message ?? "Could not get the photo", "error");
+    }
   };
 
-  const recent = (items ?? []).slice(0, 6);
-  const topRated = [...(items ?? [])].sort((a, b) => b.rating - a.rating).slice(0, 3);
+  const analyze = () => {
+    setFlow({ result: null });
+    router.push("/processing");
+  };
+
+  // Hard-coded response: demo path that needs no AI or internet
+  const trySample = () => {
+    setFlow({ result: SAMPLE_RESULT, scope: "own" });
+    router.push("/result");
+  };
+
+  // The first tab is the resident's; the домоуправител starts in the inbox
+  if (role === "manager") return <Redirect href="/inbox" />;
 
   return (
-    <ScreenWrapper scroll refreshing={refreshing} onRefresh={refresh}>
-      <View style={styles.top}>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.hello}>Hi, {firstName}</Text>
-          <Text style={styles.sub}>What are we working on today?</Text>
-        </View>
-        <Pressable accessibilityLabel="Open profile" onPress={() => router.push("/profile")}>
-          <Avatar name={fullName} uri={user?.user_metadata?.avatar_url} />
-        </Pressable>
-      </View>
+    <ScreenWrapper scroll>
+      <Text style={styles.title}>Something broke?</Text>
+      <Text style={styles.sub}>Take a photo. We tell you who should fix it, and what to do right now.</Text>
 
-      {/* The one loud element on the screen */}
-      <View style={styles.hero}>
-        <Text style={styles.heroTitle}>Ask the assistant</Text>
-        <Text style={styles.heroBody}>Ideas, answers, plans and summaries in a few seconds.</Text>
-        <View style={styles.askRow}>
-          <TextInput
-            value={question}
-            onChangeText={setQuestion}
-            onSubmitEditing={ask}
-            placeholder="Type a question"
-            placeholderTextColor={colors.textMuted}
-            returnKeyType="send"
-            style={styles.askInput}
-          />
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Send question"
-            onPress={ask}
-            style={({ pressed }) => [styles.askBtn, pressed && { opacity: 0.8 }]}
-          >
-            <Ionicons name="arrow-up" size={20} color={colors.white} />
-          </Pressable>
-        </View>
-      </View>
-
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.actionsScroll}
-        contentContainerStyle={styles.actions}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={photo ? "Retake photo" : "Take a photo"}
+        onPress={() => capture("camera")}
+        style={({ pressed }) => [styles.photoBox, pressed && { opacity: 0.85 }]}
       >
-        <Button title="Add item" icon="add" size="sm" onPress={() => router.push("/item/edit")} />
-        <Button
-          title="Nearby"
-          icon="locate"
-          size="sm"
-          variant="secondary"
-          onPress={() => router.push({ pathname: "/explore", params: { near: "1" } })}
-        />
-        <Button title="Browse all" icon="compass" size="sm" variant="secondary" onPress={() => router.push("/explore")} />
-      </ScrollView>
+        {photo ? (
+          <Image source={{ uri: photo.uri }} style={StyleSheet.absoluteFill} contentFit="cover" />
+        ) : (
+          <>
+            <Ionicons name="camera" size={40} color={colors.ink} />
+            <Text style={styles.photoText}>Tap to photograph the problem</Text>
+          </>
+        )}
+      </Pressable>
+      <View style={styles.photoActions}>
+        <Button title="Choose from gallery" icon="images" size="sm" variant="secondary" onPress={() => capture("library")} />
+        {photo ? <Button title="Clear" size="sm" variant="ghost" onPress={resetFlow} /> : null}
+      </View>
 
-      {loading ? (
-        <Loading />
-      ) : error ? (
-        <ErrorState message={error} onRetry={reload} />
-      ) : (
-        <>
-          <Text style={styles.section}>Recently added</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tiles}>
-            {recent.map((item) => (
-              <Pressable
-                key={item.id}
-                accessibilityRole="button"
-                onPress={() => router.push({ pathname: "/item/[id]", params: { id: item.id } })}
-                style={({ pressed }) => [styles.tile, pressed && { opacity: 0.8 }]}
-              >
-                <Image source={{ uri: item.image }} style={styles.tileImage} contentFit="cover" transition={150} />
-                <Text style={styles.tileTitle} numberOfLines={1}>
-                  {item.title}
-                </Text>
-                <Text style={styles.tileMeta}>{formatPrice(item.price)}</Text>
-              </Pressable>
-            ))}
-          </ScrollView>
+      <Text style={styles.section}>Where is it?</Text>
+      <View style={styles.where}>
+        {WHERE.map((w) => {
+          const selected = w.value === scope;
+          return (
+            <Pressable
+              key={w.value}
+              accessibilityRole="button"
+              accessibilityState={{ selected }}
+              onPress={() => setFlow({ scope: w.value })}
+              style={[styles.whereCard, selected && styles.whereSelected]}
+            >
+              <Ionicons name={w.icon} size={22} color={selected ? colors.white : colors.ink} />
+              <Text style={[styles.whereLabel, selected && { color: colors.white }]}>{w.label}</Text>
+              <Text style={[styles.whereHint, selected && { color: colors.white, opacity: 0.8 }]}>{w.hint}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
 
-          <Text style={styles.section}>Top rated</Text>
-          <View style={styles.list}>
-            {topRated.map((item) => (
-              <ItemRow
-                key={item.id}
-                item={item}
-                onPress={() => router.push({ pathname: "/item/[id]", params: { id: item.id } })}
-              />
-            ))}
-          </View>
-        </>
-      )}
+      <TextInput
+        value={note}
+        onChangeText={(t) => setFlow({ note: t })}
+        placeholder="Anything we should know? (optional)"
+        placeholderTextColor={colors.textMuted}
+        style={styles.note}
+        maxLength={300}
+      />
+
+      <Button title="Find out who fixes it" icon="sparkles" disabled={!photo} onPress={analyze} style={{ marginTop: spacing.lg }} />
+      <Button title="Try a sample" variant="ghost" onPress={trySample} />
     </ScreenWrapper>
   );
 }
 
 const styles = StyleSheet.create({
-  top: { flexDirection: "row", alignItems: "center", gap: spacing.md, marginBottom: spacing.lg },
-  hello: { ...typography.display, color: colors.ink },
-  sub: { ...typography.body, color: colors.textMuted, marginTop: 2 },
-
-  hero: {
-    backgroundColor: colors.accent,
+  title: { ...typography.display, color: colors.ink },
+  sub: { ...typography.body, color: colors.textMuted, marginTop: 4, marginBottom: spacing.lg },
+  photoBox: {
+    height: 240,
     borderRadius: radius.xl,
-    padding: spacing.lg,
-    gap: spacing.sm,
-  },
-  heroTitle: { ...typography.h1, color: colors.ink },
-  heroBody: { ...typography.body, color: colors.ink, opacity: 0.8, maxWidth: 320 },
-  askRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: colors.surface,
-    borderRadius: radius.pill,
-    paddingLeft: spacing.md,
-    padding: 6,
-    marginTop: spacing.sm,
-  },
-  askInput: { ...typography.body, flex: 1, color: colors.ink, paddingVertical: 8, minWidth: 0 },
-  askBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: colors.ink,
+    backgroundColor: colors.accent,
     alignItems: "center",
     justifyContent: "center",
+    gap: spacing.sm,
+    overflow: "hidden",
   },
-
-  actionsScroll: { flexGrow: 0, marginTop: spacing.md, marginHorizontal: -spacing.lg },
-  actions: { gap: spacing.sm, paddingHorizontal: spacing.lg },
-
-  section: { ...typography.h2, color: colors.ink, marginTop: spacing.xl, marginBottom: spacing.md },
-  tiles: { gap: spacing.md, paddingRight: spacing.lg },
-  tile: { width: 150, gap: 6 },
-  tileImage: { width: 150, height: 150, borderRadius: radius.lg, backgroundColor: colors.secondary },
-  tileTitle: { ...typography.label, color: colors.ink },
-  tileMeta: { ...typography.caption, color: colors.textMuted, marginTop: -4 },
-  list: { gap: spacing.sm },
+  photoText: { ...typography.label, color: colors.ink },
+  photoActions: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.sm },
+  section: { ...typography.h2, color: colors.ink, marginTop: spacing.lg, marginBottom: spacing.md },
+  where: { flexDirection: "row", gap: spacing.sm },
+  whereCard: { flex: 1, padding: spacing.md, borderRadius: radius.lg, backgroundColor: colors.surface, gap: 4 },
+  whereSelected: { backgroundColor: colors.ink },
+  whereLabel: { ...typography.label, color: colors.ink, marginTop: 4 },
+  whereHint: { ...typography.caption, color: colors.textMuted },
+  note: {
+    ...typography.body,
+    marginTop: spacing.md,
+    padding: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.surface,
+    color: colors.ink,
+  },
 });

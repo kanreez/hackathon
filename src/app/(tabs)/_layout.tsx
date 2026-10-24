@@ -4,6 +4,7 @@ import { ComponentProps } from "react";
 import { View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors, fonts } from "../../constants/theme";
+import { useRole } from "../../context/RoleContext";
 
 type IconName = ComponentProps<typeof Ionicons>["name"];
 
@@ -31,6 +32,9 @@ function TabIcon({ name, focused }: { name: string; focused: boolean }) {
 
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
+  const { role } = useRole();
+  // Residents report problems; the домоуправител gets the inbox and the building context form
+  const isManager = role === "manager";
   return (
     <Tabs
       screenOptions={{
@@ -53,15 +57,31 @@ export default function TabsLayout() {
     >
       <Tabs.Screen
         name="index"
-        options={{ title: "Home", tabBarIcon: ({ focused }) => <TabIcon name="home" focused={focused} /> }}
+        options={{ href: isManager ? null : undefined, title: "Report", tabBarIcon: ({ focused }) => <TabIcon name="camera" focused={focused} /> }}
+      />
+      <Tabs.Screen
+        name="inbox"
+        options={{
+          href: isManager ? undefined : null,
+          title: "Inbox",
+          tabBarIcon: ({ focused }) => <TabIcon name="file-tray-full" focused={focused} />,
+        }}
+      />
+      <Tabs.Screen
+        name="building"
+        options={{
+          href: isManager ? undefined : null,
+          title: "Building",
+          tabBarIcon: ({ focused }) => <TabIcon name="business" focused={focused} />,
+        }}
       />
       <Tabs.Screen
         name="explore"
-        options={{ title: "Explore", tabBarIcon: ({ focused }) => <TabIcon name="compass" focused={focused} /> }}
+        options={{ href: null, title: "Explore", tabBarIcon: ({ focused }) => <TabIcon name="compass" focused={focused} /> }}
       />
       <Tabs.Screen
         name="ai"
-        options={{ title: "Assistant", tabBarIcon: ({ focused }) => <TabIcon name="sparkles" focused={focused} /> }}
+        options={{ href: null, title: "Assistant", tabBarIcon: ({ focused }) => <TabIcon name="sparkles" focused={focused} /> }}
       />
       <Tabs.Screen
         name="profile"
