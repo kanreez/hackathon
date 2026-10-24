@@ -11,9 +11,9 @@ import { notify } from "../../components/Toast";
 import { colors, radius, spacing, typography } from "../../constants/theme";
 import { useAsync } from "../../hooks/useAsync";
 import { useRefreshOnFocus } from "../../hooks/useRefreshOnFocus";
-import { getCommand, myBookings, openGarage } from "../../services/garages";
+import { getCommand, myBookings, sendDoorCommand } from "../../services/garages";
 import { cancelBooking } from "../../services/payments";
-import { Booking } from "../../types/garage";
+import { Booking, DoorAction } from "../../types/garage";
 import { formatCents, formatDuration, formatRange, formatTime } from "../../utils/booking";
 
 const POLL_MS = 1000;
@@ -91,11 +91,17 @@ export default function Bookings() {
   );
 }
 
-type Door = { phase: "idle" } | { phase: "opening" } | { phase: "opened"; at: Date } | { phase: "error"; message: string };
+type Door =
+  | { phase: "idle" }
+  | { phase: "busy"; action: DoorAction }
+  | { phase: "done"; action: DoorAction; at: Date }
+  | { phase: "error"; message: string };
 
 function ActiveBooking({ booking, now }: { booking: Booking; now: Date }) {
   const g = booking.garage;
   const [door, setDoor] = useState<Door>({ phase: "idle" });
+  // Whether the last command that went through opened the door, so the button offers the other one
+  const [isOpen, setIsOpen] = useState(false);
   const alive = useRef(true);
 
   useEffect(() => {
@@ -105,22 +111,23 @@ function ActiveBooking({ booking, now }: { booking: Booking; now: Date }) {
     };
   }, []);
 
-  const open = async () => {
+  const send = async (action: DoorAction) => {
     if (!g) return;
-    setDoor({ phase: "opening" });
+    setDoor({ phase: "busy", action });
     try {
-      const commandId = await openGarage(g.id);
+      const commandId = await sendDoorCommand(g.id, action);
       const startedAt = Date.now();
       while (alive.current && Date.now() - startedAt < GIVE_UP_MS) {
         await new Promise((r) => setTimeout(r, POLL_MS));
         const c = await getCommand(commandId);
         if (c.status === "opened") {
           const at = c.acked_at ? new Date(c.acked_at) : new Date();
-          setDoor({ phase: "opened", at });
-          notify(`Opened ${formatTime(at)}`);
+          setDoor({ phase: "done", action, at });
+          setIsOpen(action === "open");
+          notify(`${DONE_LABEL[action]} ${formatTime(at)}`);
           return;
         }
-        if (c.status === "error") throw new Error(c.error ?? "The door couldn't be opened");
+        if (c.status === "error") throw new Error(c.error ?? `The door couldn't be ${DONE_LABEL[action].toLowerCase()}`);
       }
       if (alive.current) throw new Error("The door didn't respond. Try again.");
     } catch (e: any) {
@@ -132,6 +139,7 @@ function ActiveBooking({ booking, now }: { booking: Booking; now: Date }) {
 
   const left = new Date(booking.ends_at).getTime() - now.getTime();
   const app = g?.access === "app";
+  const next: DoorAction = isOpen ? "close" : "open";
 
   return (
     <Card style={styles.active}>
@@ -151,13 +159,13 @@ function ActiveBooking({ booking, now }: { booking: Booking; now: Date }) {
         <>
           <DoorStatus door={door} />
           <Button
-            title={door.phase === "opening" ? "Opening…" : door.phase === "opened" ? "Open again" : "Open garage"}
-            icon="lock-open"
-            variant="accent"
-            loading={door.phase === "opening"}
-            onPress={open}
+            title={door.phase === "busy" ? BUSY_LABEL[door.action] : next === "open" ? "Open garage" : "Close garage"}
+            icon={next === "open" ? "lock-open" : "lock-closed"}
+            variant={next === "open" ? "accent" : "primary"}
+            loading={door.phase === "busy"}
+            onPress={() => send(next)}
             style={styles.openBtn}
-            accessibilityLabel="Open the garage door"
+            accessibilityLabel={`${next === "open" ? "Open" : "Close"} the garage door`}
           />
         </>
       ) : (
@@ -170,21 +178,26 @@ function ActiveBooking({ booking, now }: { booking: Booking; now: Date }) {
   );
 }
 
+const BUSY_LABEL: Record<DoorAction, string> = { open: "Opening…", close: "Closing…" };
+const DONE_LABEL: Record<DoorAction, string> = { open: "Opened", close: "Closed" };
+
 function DoorStatus({ door }: { door: Door }) {
   if (door.phase === "idle") return <Text style={styles.hint}>Stand by the door, then tap Open. It opens in a second or two.</Text>;
-  if (door.phase === "opening") {
+  if (door.phase === "busy") {
     return (
       <View style={styles.status} accessibilityLiveRegion="polite">
         <IconTile icon="hourglass" size={40} bg={colors.accentSoft} color={colors.accentDeep} />
-        <Text style={styles.statusText}>Opening… waiting for the door</Text>
+        <Text style={styles.statusText}>{BUSY_LABEL[door.action]} waiting for the door</Text>
       </View>
     );
   }
-  if (door.phase === "opened") {
+  if (door.phase === "done") {
     return (
       <View style={[styles.status, { backgroundColor: colors.successSoft }]} accessibilityLiveRegion="polite">
-        <IconTile icon="checkmark" size={40} bg={colors.surface} color={colors.success} />
-        <Text style={[styles.statusText, { color: colors.success }]}>Opened {formatTime(door.at)}</Text>
+        <IconTile icon={door.action === "open" ? "checkmark" : "lock-closed"} size={40} bg={colors.surface} color={colors.success} />
+        <Text style={[styles.statusText, { color: colors.success }]}>
+          {DONE_LABEL[door.action]} {formatTime(door.at)}
+        </Text>
       </View>
     );
   }

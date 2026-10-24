@@ -132,5 +132,7 @@ export type SearchResult = {
   garages: Garage[];
 };
 
+export type DoorAction = "open" | "close";
+// "opened" = the device carried the command out, for "close" too
 export type CommandStatus = "queued" | "opened" | "error";
 export type Command = { status: CommandStatus; acked_at: string | null; error: string | null };

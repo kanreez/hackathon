@@ -1,4 +1,4 @@
-import { Booking, BookingMode, BusySlot, Checkout, Command, Garage, GarageInput, SearchResult } from "../types/garage";
+import { Booking, BookingMode, BusySlot, Checkout, Command, DoorAction, Garage, GarageInput, SearchResult } from "../types/garage";
 import { toLocalIso } from "../utils/booking";
 import { api } from "./api";
 
@@ -54,9 +54,9 @@ export async function myBookings() {
   return (await api.get<{ bookings: Booking[] }>("/api/bookings/mine")).bookings;
 }
 
-// Asks the server to open the door; the ESP32 picks the command up within about a second
-export async function openGarage(garageId: string) {
-  return (await api.post<{ command_id: string }>(`/api/garages/${garageId}/open`)).command_id;
+// Asks the server to open or close the door; the ESP32 picks the command up within about a second
+export async function sendDoorCommand(garageId: string, action: DoorAction) {
+  return (await api.post<{ command_id: string }>(`/api/garages/${garageId}/${action}`)).command_id;
 }
 
 export async function getCommand(id: string) {

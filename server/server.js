@@ -533,8 +533,8 @@ app.get("/api/host/earnings", requireAuth, route(async (req, res) => {
 const COMMAND_TIMEOUT_MS = 20000;
 const isStale = (c) => Date.now() - new Date(c.created_at).getTime() > COMMAND_TIMEOUT_MS;
 
-// App -> server. Only a renter with a paid booking that covers right now can open the door.
-app.post("/api/garages/:id/open", requireAuth, route(async (req, res) => {
+// App -> server. Only a renter with a paid booking that covers right now can open or close the door.
+const doorRoute = (action) => route(async (req, res) => {
   const garage = await repo.getGarage(req.params.id);
   if (!garage) return res.status(404).json({ error: "Garage not found" });
   if (garage.access !== "app") return res.status(400).json({ error: "This garage is opened by the host, not from the app" });
@@ -542,9 +542,12 @@ app.post("/api/garages/:id/open", requireAuth, route(async (req, res) => {
   const booking = await repo.findActiveBooking(req.user.id, garage.id);
   if (!booking) return res.status(403).json({ error: "No paid active booking for this garage" });
 
-  const command = await repo.createCommand({ garage_id: garage.id, booking_id: booking.id, requested_by: req.user.id });
+  const command = await repo.createCommand({ garage_id: garage.id, booking_id: booking.id, requested_by: req.user.id, action });
   res.status(201).json({ command_id: command.id });
-}));
+});
+
+app.post("/api/garages/:id/open", requireAuth, doorRoute("open"));
+app.post("/api/garages/:id/close", requireAuth, doorRoute("close"));
 
 // App polls this after tapping Open: { status: "queued" | "opened" | "error" }
 app.get("/api/commands/:id", requireAuth, route(async (req, res) => {
@@ -556,7 +559,7 @@ app.get("/api/commands/:id", requireAuth, route(async (req, res) => {
   res.json({ status: command.status, acked_at: command.acked_at, error: command.error });
 }));
 
-// ESP32 polls every ~1 s with header X-Device-Key -> { command_id, action } | {}
+// ESP32 polls every ~1 s with header X-Device-Key -> { command_id, action: "open" | "close" } | {}
 app.get("/api/device/commands", requireDevice, route(async (req, res) => {
   const command = await repo.takeNextCommand(req.garage.id);
   if (!command) return res.json({});
@@ -567,7 +570,8 @@ app.get("/api/device/commands", requireDevice, route(async (req, res) => {
   res.json({ command_id: command.id, action: command.action });
 }));
 
-// ESP32 -> server: { command_id, status: "opened" | "error", error? }
+// ESP32 -> server: { command_id, status: "opened" | "error", error? }. "opened" means the command was
+// carried out, for "close" too (the stored status keeps the existing database check).
 app.post("/api/device/ack", requireDevice, route(async (req, res) => {
   const { command_id, status, error } = req.body || {};
   if (!["opened", "error"].includes(status)) return res.status(400).json({ error: "status must be opened or error" });
