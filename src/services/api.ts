@@ -1,10 +1,16 @@
 import Constants from "expo-constants";
+import { Platform } from "react-native";
 import { supabase } from "./supabase";
 
 // In dev, Expo's hostUri is your PC's address as the phone sees it (e.g. "192.168.1.50:8081"),
 // so the backend on the same PC is reachable from a real phone without editing anything.
+// On web it's the address the page was opened at, so another laptop on the Wi-Fi that opens
+// http://<your PC>:8081 talks to the backend on your PC, not to "localhost" on itself.
 // Set EXPO_PUBLIC_API_URL to override (e.g. a deployed backend).
-const devHost = Constants.expoConfig?.hostUri?.split(":")[0];
+const devHost =
+  Platform.OS === "web" && typeof window !== "undefined"
+    ? window.location.hostname
+    : Constants.expoConfig?.hostUri?.split(":")[0];
 const BASE_URL =
   process.env.EXPO_PUBLIC_API_URL || (devHost ? `http://${devHost}:3000` : "http://localhost:3000");
 
