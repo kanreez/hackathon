@@ -12,10 +12,10 @@ export const AREA_CENTERS: Record<(typeof AREAS)[number], { latitude: number; lo
   Mladost: { latitude: 42.6494, longitude: 23.3792 },
 };
 
-export const SIZE_META: Record<GarageSize, { label: string; hint: string }> = {
-  small: { label: "Small", hint: "City car" },
-  medium: { label: "Medium", hint: "Golf, sedan" },
-  large: { label: "Large", hint: "SUV, van" },
+export const SIZE_META: Record<GarageSize, { label: string; hint: string; fits: string }> = {
+  small: { label: "Small", hint: "City car", fits: "a city car" },
+  medium: { label: "Medium", hint: "Golf, sedan", fits: "a Golf or a sedan" },
+  large: { label: "Large", hint: "SUV, van", fits: "an SUV or a van" },
 };
 
 export const ACCESS_META: Record<Access, { label: string; hint: string }> = {

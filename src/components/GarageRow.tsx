@@ -4,8 +4,7 @@ import { colors, spacing, typography } from "../constants/theme";
 import { Garage } from "../types/garage";
 import { formatMoney } from "../utils/booking";
 import { openDirections } from "../utils/maps";
-import { IconTile, RowAction, Tag } from "./Bits";
-import { Card } from "./Card";
+import { RowAction } from "./Bits";
 
 type Props = {
   garage: Garage;
@@ -17,43 +16,42 @@ export function formatKm(km: number) {
   return km < 1 ? `${Math.round(km * 1000)} m` : `${km.toFixed(1)} km`;
 }
 
-// One garage in a list: access tile, title, where, tags, price, and a directions action.
+// One garage in a list: a flat row between hairlines. Garages that open from the phone get a
+// painted bay line on the left edge, so it's visible at a glance; manual garages get nothing.
 // The tappable info area and the directions button sit side by side, not one inside the
 // other: on web each becomes a <button>, and a button can't contain another button.
 export function GarageRow({ garage: g, distanceKm, onPress }: Props) {
   const app = g.access === "app";
+  const where = distanceKm != null ? `${g.area}, ${formatKm(distanceKm)}` : g.area;
+  const spec = `${SIZE_META[g.size].label}, ${g.covered ? "covered" : "open-air"}`;
   const info = (
     <>
-      <IconTile
-        icon={app ? "phone-portrait" : "key"}
-        size={48}
-        bg={app ? colors.accent : colors.sand}
-      />
       <View style={styles.body}>
         <Text style={styles.title} numberOfLines={2}>
           {g.title}
         </Text>
         <Text style={styles.caption} numberOfLines={1}>
-          {g.area}
-          {distanceKm != null ? ` · ${formatKm(distanceKm)}` : ""}
+          {where}
         </Text>
-        <View style={styles.tags}>
-          <Tag label={SIZE_META[g.size].label} bg={colors.sand} />
-          <Tag label={g.covered ? "Covered" : "Open-air"} bg={colors.sand} />
-          {app ? <Tag label="App door" icon="flash" bg={colors.accentSoft} color={colors.accentDeep} /> : null}
-        </View>
-        <Text style={styles.price}>
-          {formatMoney(g.price_hour)}/h · {formatMoney(g.price_day)}/day
+        <Text style={styles.caption} numberOfLines={1}>
+          {spec}
         </Text>
+        {app ? <Text style={styles.app}>Opens from your phone</Text> : null}
+      </View>
+      <View style={styles.prices}>
+        <Text style={styles.price}>{formatMoney(g.price_hour)}</Text>
+        <Text style={styles.caption}>per hour</Text>
+        <Text style={[styles.caption, styles.tabular]}>{formatMoney(g.price_day)} a day</Text>
       </View>
     </>
   );
   return (
-    <Card style={styles.row}>
+    <View style={styles.row}>
+      {app ? <View style={styles.bayLine} /> : null}
       {onPress ? (
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={`${g.title}, ${formatMoney(g.price_hour)} per hour`}
+          accessibilityLabel={`${g.title}, ${formatMoney(g.price_hour)} per hour${app ? ", opens from your phone" : ""}`}
           onPress={onPress}
           style={({ pressed }) => [styles.info, pressed && { opacity: 0.75 }]}
         >
@@ -63,16 +61,28 @@ export function GarageRow({ garage: g, distanceKm, onPress }: Props) {
         <View style={styles.info}>{info}</View>
       )}
       <RowAction icon="navigate" label={`Directions to ${g.title}`} onPress={() => openDirections(g)} />
-    </Card>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: "row", gap: spacing.md, alignItems: "center", marginBottom: spacing.sm, padding: 14 },
-  info: { flex: 1, flexDirection: "row", gap: spacing.md, alignItems: "center" },
-  body: { flex: 1, gap: 4 },
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    paddingVertical: 14,
+    paddingLeft: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  // The painted bay line: only on garages that open from the phone
+  bayLine: { position: "absolute", left: 0, top: 14, bottom: 14, width: 2, borderRadius: 1, backgroundColor: colors.cta },
+  info: { flex: 1, flexDirection: "row", gap: spacing.md, alignItems: "flex-start" },
+  body: { flex: 1, gap: 2 },
   title: { ...typography.h3, color: colors.ink },
   caption: { ...typography.caption, color: colors.textMuted },
-  tags: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 2 },
-  price: { ...typography.label, color: colors.ink, marginTop: 2 },
+  app: { ...typography.caption, color: colors.cta, marginTop: 2 },
+  prices: { alignItems: "flex-end" },
+  price: { ...typography.figureSm, color: colors.ink },
+  tabular: typography.tabular,
 });

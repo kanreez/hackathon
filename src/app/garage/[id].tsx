@@ -3,11 +3,10 @@ import { Image } from "expo-image";
 import { router, useLocalSearchParams } from "expo-router";
 import { ComponentProps, useCallback, useState } from "react";
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View, ViewStyle } from "react-native";
-import { IconTile, SectionTitle, Tag } from "../../components/Bits";
+import { SectionTitle } from "../../components/Bits";
 import { Button } from "../../components/Button";
 import { Card } from "../../components/Card";
 import { ChipRow } from "../../components/Chip";
-import { Glow } from "../../components/Glow";
 import { Header } from "../../components/Header";
 import { AppMap } from "../../components/map/AppMap";
 import { PaySheet } from "../../components/PaySheet";
@@ -15,7 +14,7 @@ import { ScreenWrapper } from "../../components/ScreenWrapper";
 import { ErrorState, Loading } from "../../components/StateViews";
 import { StepTracker } from "../../components/StepTracker";
 import { notify } from "../../components/Toast";
-import { ACCESS_META, SIZE_META } from "../../constants/garages";
+import { SIZE_META } from "../../constants/garages";
 import { colors, radius, shadow, spacing, typography } from "../../constants/theme";
 import { useAsync } from "../../hooks/useAsync";
 import { useIsWide } from "../../hooks/useIsWide";
@@ -162,26 +161,27 @@ function BookForm({ garage, busy, from, to }: { garage: Garage; busy: BusySlot[]
   const details = (
     <>
       <View style={styles.hero}>
-        <View style={styles.heroShape} />
-        <View style={styles.heroTop}>
-          <IconTile icon={app ? "phone-portrait" : "key"} size={52} bg={app ? colors.accent : colors.sand} />
-          <Tag label={app ? "App door" : "Host lets you in"} icon={app ? "flash" : "key"} color={colors.accentDeep} outline />
-        </View>
         <Text style={styles.heroTitle}>{garage.title}</Text>
-        <Text style={styles.heroBody}>{[garage.area, garage.address].filter(Boolean).join(" · ")}</Text>
+        <Text style={styles.heroBody}>{garage.address ? `${garage.address}, ${garage.area}` : garage.area}</Text>
+        <View style={styles.access}>
+          {app ? <View style={styles.bayLine} /> : null}
+          <Text style={[styles.accessText, app && { color: colors.cta }]}>
+            {app ? "Opens from your phone when your booking starts" : "The host lets you in at the start time"}
+          </Text>
+        </View>
       </View>
 
       {garage.image_url ? <Image source={{ uri: garage.image_url }} style={styles.photo} contentFit="cover" /> : null}
 
-      <Card style={styles.facts}>
-        <Fact icon="resize" label="Size" value={`${SIZE_META[garage.size].label} · ${SIZE_META[garage.size].hint}`} />
-        <Fact icon={garage.covered ? "umbrella" : "sunny"} label="Type" value={garage.covered ? "Covered" : "Open-air"} divider />
-        <Fact icon={app ? "phone-portrait" : "key"} label="Access" value={ACCESS_META[garage.access].label} hint={ACCESS_META[garage.access].hint} divider accent={app} />
-        <Fact icon="cash" label="Price" value={`${formatMoney(garage.price_hour)} per hour · ${formatMoney(garage.price_day)} per day`} divider />
-        <Fact icon="calendar" label="Free" value={summarizeAvailability(garage.availability)} divider />
-        {garage.description ? <Text style={styles.description}>{garage.description}</Text> : null}
-        <Button title="Directions" icon="navigate" variant="secondary" size="sm" onPress={() => openDirections(garage)} style={{ alignSelf: "flex-start", marginTop: spacing.sm }} />
-      </Card>
+      <View style={styles.facts}>
+        <Fact label="Size" value={`${SIZE_META[garage.size].label}, fits ${SIZE_META[garage.size].fits}`} />
+        <Fact label="Type" value={garage.covered ? "Covered" : "Open-air"} />
+        <Fact label="Per hour" value={formatMoney(garage.price_hour)} figure />
+        <Fact label="Per day" value={formatMoney(garage.price_day)} figure />
+        <Fact label="Free" value={summarizeAvailability(garage.availability)} />
+      </View>
+      {garage.description ? <Text style={styles.description}>{garage.description}</Text> : null}
+      <Button title="Directions" icon="navigate" variant="secondary" size="sm" onPress={() => openDirections(garage)} style={{ alignSelf: "flex-start", marginTop: spacing.md }} />
 
       {spot ? (
         // A still preview: where it is at a glance; Directions opens Google Maps for the route
@@ -250,10 +250,7 @@ function BookForm({ garage, busy, from, to }: { garage: Garage; busy: BusySlot[]
       </Card>
 
       <View style={styles.summary}>
-        <View style={{ flex: 1, gap: 2 }}>
-          <Text style={styles.eyebrow}>Your booking</Text>
-          <Text style={styles.range}>{formatRange(start, end)}</Text>
-        </View>
+        <Text style={styles.range}>{formatRange(start, end)}</Text>
         <Text style={styles.total}>{formatMoney(total)}</Text>
       </View>
 
@@ -272,7 +269,7 @@ function BookForm({ garage, busy, from, to }: { garage: Garage; busy: BusySlot[]
       ) : null}
 
       <Button
-        title={`Confirm · ${formatMoney(total)}`}
+        title={`Book for ${formatMoney(total)}`}
         icon="checkmark"
         variant="accent"
         loading={saving}
@@ -306,7 +303,6 @@ function BookForm({ garage, busy, from, to }: { garage: Garage; busy: BusySlot[]
 
   return (
     <ScreenWrapper scroll>
-      <Glow corner="bottomLeft" />
       <Header title="Book a garage" back />
       <StepTracker active={1} />
 
@@ -327,15 +323,11 @@ function BookForm({ garage, busy, from, to }: { garage: Garage; busy: BusySlot[]
   );
 }
 
-function Fact({ icon, label, value, hint, divider, accent }: { icon: IconName; label: string; value: string; hint?: string; divider?: boolean; accent?: boolean }) {
+function Fact({ label, value, figure }: { label: string; value: string; figure?: boolean }) {
   return (
-    <View style={[styles.fact, divider && styles.divider]}>
-      <IconTile icon={icon} size={40} bg={accent ? colors.accent : colors.sand} />
-      <View style={{ flex: 1 }}>
-        <Text style={styles.factLabel}>{label}</Text>
-        <Text style={styles.factValue}>{value}</Text>
-        {hint ? <Text style={styles.factLabel}>{hint}</Text> : null}
-      </View>
+    <View style={styles.fact}>
+      <Text style={styles.factLabel}>{label}</Text>
+      <Text style={[styles.factValue, figure && styles.factFigure]}>{value}</Text>
     </View>
   );
 }
@@ -393,35 +385,20 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     backgroundColor: colors.surface,
   },
-  hero: {
-    gap: spacing.sm,
-    padding: spacing.lg,
-    marginBottom: spacing.md,
-    borderRadius: radius.xl,
-    backgroundColor: colors.accentSoft,
-    overflow: "hidden",
-  },
-  // The faint tilted square in the hero's corner
-  heroShape: {
-    position: "absolute",
-    top: -40,
-    right: -40,
-    width: 150,
-    height: 150,
-    borderRadius: 36,
-    backgroundColor: colors.accent,
-    opacity: 0.16,
-    transform: [{ rotate: "-14deg" }],
-  },
-  heroTop: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", marginBottom: spacing.sm },
+  hero: { gap: spacing.xs, marginBottom: spacing.lg },
   heroTitle: { ...typography.h1, color: colors.ink },
-  heroBody: { ...typography.body, color: colors.ink, opacity: 0.85 },
+  heroBody: { ...typography.body, color: colors.textMuted },
+  access: { flexDirection: "row", alignItems: "center", gap: spacing.sm, marginTop: spacing.sm },
+  // The same painted bay line as the list rows
+  bayLine: { width: 2, alignSelf: "stretch", borderRadius: 1, backgroundColor: colors.cta },
+  accessText: { ...typography.label, color: colors.textMuted, flex: 1 },
   photo: { height: 200, borderRadius: radius.xl, backgroundColor: colors.sand, marginBottom: spacing.md },
-  facts: { padding: spacing.lg, gap: 0 },
-  fact: { flexDirection: "row", alignItems: "center", gap: spacing.md, paddingVertical: 10 },
+  facts: { borderTopWidth: 1, borderTopColor: colors.border },
+  fact: { flexDirection: "row", alignItems: "baseline", gap: spacing.md, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border },
   divider: { borderTopWidth: 1, borderTopColor: colors.border },
-  factLabel: { ...typography.caption, color: colors.textMuted },
-  factValue: { ...typography.h3, color: colors.ink },
+  factLabel: { ...typography.label, color: colors.textMuted, width: 84 },
+  factValue: { ...typography.h3, color: colors.ink, flex: 1 },
+  factFigure: { ...typography.figureSm },
   label: { ...typography.label, color: colors.ink, marginTop: spacing.lg, marginBottom: spacing.sm },
   days: { gap: spacing.sm, paddingRight: spacing.lg },
   dayTile: {
@@ -452,9 +429,8 @@ const styles = StyleSheet.create({
     borderRadius: radius.xl,
     backgroundColor: colors.accentSoft,
   },
-  eyebrow: { ...typography.eyebrow, color: colors.accentDeep },
-  range: { ...typography.h3, color: colors.ink },
-  total: { ...typography.h1, color: colors.ink },
+  range: { ...typography.h3, color: colors.ink, flex: 1, ...typography.tabular },
+  total: { ...typography.figure, color: colors.ink },
   clash: {
     flexDirection: "row",
     gap: spacing.sm,
@@ -465,6 +441,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.errorSoft,
   },
   clashText: { ...typography.label, color: colors.errorText, flex: 1 },
-  description: { ...typography.body, color: colors.ink, paddingTop: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border },
+  description: { ...typography.body, color: colors.ink, marginTop: spacing.md },
   note: { ...typography.caption, color: colors.textMuted, textAlign: "center", marginTop: spacing.sm },
 });

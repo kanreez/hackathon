@@ -143,7 +143,6 @@ export function PaySheet({ checkout, title, range, breakdown, onPaid, onClose, o
           <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
             <View style={styles.head}>
               <View style={{ flex: 1, gap: 2 }}>
-                <Text style={styles.eyebrow}>Pay to confirm</Text>
                 <Text style={styles.title} numberOfLines={2}>
                   {title}
                 </Text>
@@ -259,7 +258,6 @@ const styles = StyleSheet.create({
   sheetWide: { width: "100%", maxWidth: 480, borderRadius: radius.xl },
   content: { padding: spacing.lg, gap: spacing.md, paddingBottom: spacing.xl },
   head: { flexDirection: "row", alignItems: "flex-start", gap: spacing.md },
-  eyebrow: { ...typography.eyebrow, color: colors.accentDeep },
   title: { ...typography.h2, color: colors.ink },
   caption: { ...typography.caption, color: colors.textMuted },
   close: {
@@ -278,8 +276,8 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     backgroundColor: colors.surface,
   },
-  held: { ...typography.label, color: colors.accentDeep, marginTop: 2 },
-  amount: { ...typography.h1, color: colors.ink },
+  held: { ...typography.label, color: colors.accentDeep, marginTop: 2, ...typography.tabular },
+  amount: { ...typography.figure, color: colors.ink },
   pair: { flexDirection: "row", gap: spacing.sm },
   declined: {
     flexDirection: "row",
@@ -292,7 +290,7 @@ const styles = StyleSheet.create({
   declinedText: { ...typography.label, color: colors.errorText, flex: 1 },
   note: { ...typography.caption, color: colors.textMuted, textAlign: "center" },
   success: { alignItems: "center", gap: spacing.sm, paddingVertical: spacing.lg },
-  successTitle: { ...typography.h2, color: colors.success },
+  successTitle: { ...typography.h2, color: colors.success, ...typography.tabular },
   bank: { gap: spacing.sm, padding: spacing.md, borderRadius: radius.lg, backgroundColor: colors.sand },
   bankHead: { flexDirection: "row", alignItems: "center", gap: spacing.md, marginBottom: spacing.sm },
   bankTitle: { ...typography.h3, color: colors.ink },

@@ -5,7 +5,6 @@ import { Headline } from "../../components/Bits";
 import { BrandMark } from "../../components/BrandMark";
 import { APP_TAGLINE } from "../../constants/app";
 import { Button } from "../../components/Button";
-import { Glow } from "../../components/Glow";
 import { Input } from "../../components/Input";
 import { ScreenWrapper } from "../../components/ScreenWrapper";
 import { authStyles as styles } from "../../constants/authStyles";
@@ -32,7 +31,6 @@ export default function Login() {
 
   return (
     <ScreenWrapper scroll style={styles.page}>
-      <Glow corner="topRight" />
       <BrandMark size={64} />
       <View style={styles.intro}>
         <Headline title="Book it. Open it." subline={APP_TAGLINE} />
