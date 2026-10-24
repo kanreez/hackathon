@@ -56,19 +56,26 @@ const SEED_GARAGES = [
   }),
 ];
 
+const TABLE_RECHECK_MS = 30000;
+
 function createRepo(supabase) {
   const mem = { garages: [...SEED_GARAGES], bookings: [], payments: [], commands: [] };
-  const tableOk = {};
+  const tableOk = {}; // table -> { ok, checkedAt }
 
-  // Checks once per table whether Supabase has it; falls back to memory if not
+  // Whether Supabase has the table; falls back to memory if not. A found table is remembered;
+  // a missing one is checked again after TABLE_RECHECK_MS, so running the SQL while the
+  // server is up switches it over without a restart.
   async function hasTable(table) {
-    if (tableOk[table] === undefined) {
-      // A HEAD probe reports a missing table as success, so read one real row
-      const { error } = await supabase.from(table).select("*").limit(1);
-      tableOk[table] = !error;
-      if (error) console.warn(`${table}: using in-memory store (${error.message})`);
-    }
-    return tableOk[table];
+    const known = tableOk[table];
+    if (known?.ok) return true;
+    if (known && Date.now() - known.checkedAt < TABLE_RECHECK_MS) return false;
+
+    // A HEAD probe reports a missing table as success, so read one real row
+    const { error } = await supabase.from(table).select("*").limit(1);
+    tableOk[table] = { ok: !error, checkedAt: Date.now() };
+    if (error && !known) console.warn(`${table}: using in-memory store (${error.message}). Checking again every 30 s.`);
+    if (!error && known) console.log(`${table}: found in Supabase, using it from now on`);
+    return !error;
   }
 
   const must = ({ data, error }) => {

@@ -583,7 +583,11 @@ app.post("/api/device/ack", requireDevice, route(async (req, res) => {
   res.json({ ok: true });
 }));
 
-app.listen(PORT, () => {
+app.listen(PORT, (err) => {
+  if (err) {
+    console.error(`Could not start on port ${PORT}: ${err.message}`);
+    process.exit(1);
+  }
   console.log(`Server running on http://localhost:${PORT}`);
   console.log(`Payments: ${payments.name}${payments.name === "mock" ? " (fake checkout, test cards in payments/mock.js)" : ""}`);
   console.log(`Demo device keys (seed garages g1, g2): ${repo.SEED_KEYS.g1}, ${repo.SEED_KEYS.g2}`);
