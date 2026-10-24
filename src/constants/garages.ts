@@ -3,6 +3,15 @@ import { Access, GarageSize } from "../types/garage";
 // Same area names as AREAS in server/garages.js (the AI search picks one of these)
 export const AREAS = ["Lagera", "Krasno Selo", "Lozenets", "Center", "Mladost"] as const;
 
+// Centre points, same as AREAS in server/garages.js: where the map opens before there's a pin
+export const AREA_CENTERS: Record<(typeof AREAS)[number], { latitude: number; longitude: number }> = {
+  Lagera: { latitude: 42.6866, longitude: 23.3005 },
+  "Krasno Selo": { latitude: 42.6809, longitude: 23.2895 },
+  Lozenets: { latitude: 42.6735, longitude: 23.3245 },
+  Center: { latitude: 42.6935, longitude: 23.3219 },
+  Mladost: { latitude: 42.6494, longitude: 23.3792 },
+};
+
 export const SIZE_META: Record<GarageSize, { label: string; hint: string }> = {
   small: { label: "Small", hint: "City car" },
   medium: { label: "Medium", hint: "Golf, sedan" },

@@ -8,6 +8,7 @@ import { Button } from "../../components/Button";
 import { Card } from "../../components/Card";
 import { ChipRow } from "../../components/Chip";
 import { Header } from "../../components/Header";
+import { AppMap } from "../../components/map/AppMap";
 import { ScreenWrapper } from "../../components/ScreenWrapper";
 import { ErrorState, Loading } from "../../components/StateViews";
 import { StepTracker } from "../../components/StepTracker";
@@ -135,6 +136,7 @@ function BookForm({ garage, busy, from, to }: { garage: Garage; busy: BusySlot[]
   };
 
   const app = garage.access === "app";
+  const spot = garage.latitude != null && garage.longitude != null ? { latitude: garage.latitude, longitude: garage.longitude } : null;
 
   const details = (
     <>
@@ -149,6 +151,11 @@ function BookForm({ garage, busy, from, to }: { garage: Garage; busy: BusySlot[]
         {garage.description ? <Text style={styles.description}>{garage.description}</Text> : null}
         <Button title="Directions" icon="navigate" variant="secondary" size="sm" onPress={() => openDirections(garage)} style={{ alignSelf: "flex-start", marginTop: spacing.sm }} />
       </Card>
+
+      {spot ? (
+        // A still preview: where it is at a glance; Directions opens Google Maps for the route
+        <AppMap center={spot} zoom={16} picked={spot} interactive={false} style={styles.map} />
+      ) : null}
     </>
   );
 
@@ -323,6 +330,7 @@ const stickyOnWeb = (Platform.OS === "web" ? { position: "sticky", top: spacing.
 
 const styles = StyleSheet.create({
   columns: { flexDirection: "row", alignItems: "flex-start", gap: spacing.xl },
+  map: { height: 200, marginTop: spacing.md },
   detailsColumn: { flex: 1, minWidth: 0 },
   // "When?" opens with its own top margin, so the panel needs no top padding
   bookingPanel: {

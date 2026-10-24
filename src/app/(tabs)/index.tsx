@@ -4,19 +4,22 @@ import { Platform, Pressable, StyleSheet, Text, View, ViewStyle } from "react-na
 import { SectionTitle, StickerHeadline, Tag } from "../../components/Bits";
 import { Button } from "../../components/Button";
 import { Card } from "../../components/Card";
+import { Chip } from "../../components/Chip";
 import { GarageRow } from "../../components/GarageRow";
 import { Input } from "../../components/Input";
+import { AppMap } from "../../components/map/AppMap";
+import { MapPin } from "../../components/map/types";
 import { ScreenWrapper } from "../../components/ScreenWrapper";
 import { EmptyState, ErrorState, Loading } from "../../components/StateViews";
 import { StepTracker } from "../../components/StepTracker";
 import { notify } from "../../components/Toast";
-import { EXAMPLE_QUERIES, SIZE_META } from "../../constants/garages";
+import { AREA_CENTERS, EXAMPLE_QUERIES, SIZE_META } from "../../constants/garages";
 import { colors, radius, spacing, typography } from "../../constants/theme";
 import { useAsync } from "../../hooks/useAsync";
 import { useIsWide } from "../../hooks/useIsWide";
 import { listGarages, searchGarages } from "../../services/garages";
 import { Garage, SearchResult } from "../../types/garage";
-import { formatRange } from "../../utils/booking";
+import { formatMoney, formatRange } from "../../utils/booking";
 import { Coords, distanceKm, getCurrentLocation } from "../../utils/location";
 
 // Screen 1: ask in plain language, see matching garages nearby
@@ -26,6 +29,8 @@ export default function Find() {
   const [result, setResult] = useState<SearchResult | null>(null);
   const [me, setMe] = useState<Coords | null>(null);
   const wide = useIsWide();
+  const [view, setView] = useState<"list" | "map">("list");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const all = useAsync(listGarages);
 
   // Location is optional: without it the list keeps the server's order
@@ -64,6 +69,23 @@ export default function Find() {
     });
 
   const shown = result ? sortByDistance(result.garages) : sortByDistance(all.data ?? []);
+
+  // Map view: the same garages as the list, as price pins
+  const pins: MapPin[] = shown.flatMap(({ garage: g }) =>
+    g.latitude != null && g.longitude != null
+      ? [{ id: g.id, latitude: g.latitude, longitude: g.longitude, label: `${formatMoney(g.price_hour)}/h` }]
+      : []
+  );
+  const selected = shown.find((s) => s.garage.id === selectedId) ?? null;
+  // The searched area, else the middle of the pins (your own location may be far from any garage)
+  const mapCenter: Coords =
+    result?.center ??
+    (pins.length
+      ? {
+          latitude: pins.reduce((sum, p) => sum + p.latitude, 0) / pins.length,
+          longitude: pins.reduce((sum, p) => sum + p.longitude, 0) / pins.length,
+        }
+      : me ?? AREA_CENTERS.Lagera);
   const others = result && all.data ? sortByDistance(all.data.filter((g) => !result.garages.some((m) => m.id === g.id))) : [];
 
   const ask = (
@@ -113,8 +135,40 @@ export default function Find() {
 
   const results = (
     <>
-      <SectionTitle>{result ? (result.garages.length ? "Matches" : "No exact match") : "Garages near you"}</SectionTitle>
-      {all.loading && !result ? (
+      <View style={styles.resultsHead}>
+        <SectionTitle>{result ? (result.garages.length ? "Matches" : "No exact match") : "Garages near you"}</SectionTitle>
+        {shown.length ? (
+          <View style={styles.viewToggle}>
+            <Chip label="List" icon="list" selected={view === "list"} onPress={() => setView("list")} />
+            <Chip label="Map" icon="map" selected={view === "map"} onPress={() => setView("map")} />
+          </View>
+        ) : null}
+      </View>
+      {view === "map" && shown.length ? (
+        <>
+          <AppMap
+            center={mapCenter}
+            zoom={14}
+            pins={pins}
+            fitToPins
+            selectedId={selected?.garage.id}
+            onSelectPin={setSelectedId}
+            style={{ height: wide ? 480 : 340 }}
+          />
+          {selected ? (
+            <View style={{ marginTop: spacing.md }}>
+              <GarageRow garage={selected.garage} distanceKm={selected.km} onPress={() => open(selected.garage)} />
+            </View>
+          ) : (
+            <Text style={styles.mapHint}>Tap a price on the map to see that garage.</Text>
+          )}
+          {shown.length > pins.length ? (
+            <Text style={styles.mapHint}>
+              {shown.length - pins.length} more without a map location. Switch to List to see them.
+            </Text>
+          ) : null}
+        </>
+      ) : all.loading && !result ? (
         <Loading />
       ) : all.error && !result ? (
         <ErrorState message={all.error} onRetry={all.reload} />
@@ -124,7 +178,7 @@ export default function Find() {
         shown.map(({ garage, km }) => <GarageRow key={garage.id} garage={garage} distanceKm={km} onPress={() => open(garage)} />)
       )}
 
-      {result && others.length ? (
+      {view === "list" && result && others.length ? (
         <>
           <SectionTitle muted>{result.garages.length ? "Other garages" : "Closest alternatives"}</SectionTitle>
           {others.map(({ garage, km }) => (
@@ -215,6 +269,9 @@ const styles = StyleSheet.create({
   clear: { ...typography.label, color: colors.accentDeep, textDecorationLine: "underline" },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   caption: { ...typography.caption, color: colors.textMuted },
+  resultsHead: { flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between", gap: spacing.md },
+  viewToggle: { flexDirection: "row", gap: 6, marginBottom: spacing.sm },
+  mapHint: { ...typography.caption, color: colors.textMuted, marginTop: spacing.sm },
   columns: { flexDirection: "row", alignItems: "flex-start", gap: spacing.xl },
   askColumn: { width: 420 },
   // The first SectionTitle's top margin would push the list below the ask panel's top edge

@@ -7,15 +7,16 @@ import { Card } from "../../components/Card";
 import { ChipRow } from "../../components/Chip";
 import { Header } from "../../components/Header";
 import { Input } from "../../components/Input";
+import { LocationPicker } from "../../components/map/LocationPicker";
 import { ScreenWrapper } from "../../components/ScreenWrapper";
 import { ErrorState, Loading } from "../../components/StateViews";
 import { notify } from "../../components/Toast";
-import { ACCESS_META, AREAS, SIZE_META } from "../../constants/garages";
+import { ACCESS_META, AREA_CENTERS, AREAS, SIZE_META } from "../../constants/garages";
 import { colors, spacing, typography } from "../../constants/theme";
 import { useAsync } from "../../hooks/useAsync";
 import { createGarage, getGarage, updateGarage } from "../../services/garages";
 import { Access, AvailabilityWindow, Garage, GarageInput, GarageSize } from "../../types/garage";
-import { Coords, getCurrentLocation } from "../../utils/location";
+import { Coords } from "../../utils/location";
 import { goBack } from "../../utils/navigation";
 
 const AREA_OPTIONS = AREAS.map((a) => ({ value: a, label: a }));
@@ -65,15 +66,6 @@ function GarageForm({ garage }: { garage?: Garage }) {
   const [availability, setAvailability] = useState<AvailabilityWindow[] | null>(garage?.availability ?? null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
-
-  const locate = async () => {
-    try {
-      setCoords(await getCurrentLocation());
-      notify("Location added");
-    } catch (e: any) {
-      notify(e.message, "error");
-    }
-  };
 
   const validate = () => {
     const next: Record<string, string> = {};
@@ -132,17 +124,7 @@ function GarageForm({ garage }: { garage?: Garage }) {
         </Field>
         <Input label="Address" placeholder="ul. Tsar Samuil 110" value={address} onChangeText={setAddress} />
         <Field label="Location on the map">
-          {coords ? (
-            <View style={styles.row}>
-              <Text style={styles.body}>
-                {coords.latitude.toFixed(4)}, {coords.longitude.toFixed(4)}
-              </Text>
-              <Button title="Remove" size="sm" variant="ghost" onPress={() => setCoords(null)} />
-            </View>
-          ) : (
-            <Button title="Use my location" icon="locate" size="sm" variant="secondary" onPress={locate} style={{ alignSelf: "flex-start" }} />
-          )}
-          <Text style={styles.caption}>Stand at the garage and tap this, so renters see the right distance.</Text>
+          <LocationPicker value={coords} onChange={setCoords} fallbackCenter={AREA_CENTERS[area]} />
         </Field>
       </Card>
 
