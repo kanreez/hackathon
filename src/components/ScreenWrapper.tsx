@@ -64,6 +64,7 @@ export function ScreenWrapper({
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
   flex: { flex: 1 },
-  scrollContent: { flexGrow: 1, paddingBottom: spacing.xxl },
+  // Clears the floating tab bar
+  scrollContent: { flexGrow: 1, paddingBottom: 120 },
   padded: { paddingHorizontal: spacing.lg, paddingTop: spacing.md },
 });

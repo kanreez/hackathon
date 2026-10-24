@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { Animated, StyleSheet, Text } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { colors, radius, spacing, typography } from "../constants/theme";
+import { colors, radius, shadow, spacing, typography } from "../constants/theme";
 
 type ToastType = "success" | "error" | "info";
 type ToastState = { message: string; type: ToastType; key: number } | null;
@@ -94,10 +94,10 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     paddingHorizontal: spacing.md,
     paddingVertical: 14,
-    borderRadius: radius.lg,
+    borderRadius: radius.pill,
     backgroundColor: colors.ink,
     zIndex: 1000,
-    elevation: 10,
+    ...shadow.float,
   },
   text: { ...typography.label, color: colors.white, flex: 1 },
 });

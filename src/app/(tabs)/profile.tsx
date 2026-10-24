@@ -1,13 +1,16 @@
-import { useEffect, useState } from "react";
+import { Ionicons } from "@expo/vector-icons";
+import { ComponentProps, useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Avatar } from "../../components/Avatar";
+import { IconTile, SectionTitle, Tag } from "../../components/Bits";
 import { Button } from "../../components/Button";
+import { Card } from "../../components/Card";
 import { Header } from "../../components/Header";
 import { Input } from "../../components/Input";
 import { ScreenWrapper } from "../../components/ScreenWrapper";
 import { Loading } from "../../components/StateViews";
 import { notify } from "../../components/Toast";
-import { colors, radius, spacing, typography } from "../../constants/theme";
+import { colors, radius, routeColors, spacing, typography } from "../../constants/theme";
 import { useAuth } from "../../context/AuthContext";
 import { useRole } from "../../context/RoleContext";
 import { useAsync } from "../../hooks/useAsync";
@@ -94,94 +97,124 @@ export default function Profile() {
     }
   };
 
+  const isManager = role === "manager";
+
   return (
     <ScreenWrapper scroll style={styles.page}>
       <Header title="Profile" />
 
-      <View style={styles.identity}>
+      <View style={styles.hero}>
         <Pressable accessibilityRole="button" accessibilityLabel="Change photo" onPress={changePhoto}>
-          <Avatar uri={avatarUrl} name={fullName || user?.email} size={88} />
+          <Avatar uri={avatarUrl} name={fullName || user?.email} size={72} />
         </Pressable>
         <View style={{ flex: 1, gap: 4 }}>
           <Text style={styles.name} numberOfLines={1}>
             {fullName || "No name yet"}
           </Text>
-          <Text style={styles.email} numberOfLines={1}>
+          <Text style={styles.caption} numberOfLines={1}>
             {user?.email}
           </Text>
-          <Button
-            title={avatarUrl ? "Change photo" : "Add photo"}
-            icon="camera-outline"
-            size="sm"
-            variant="secondary"
-            loading={uploading}
-            onPress={changePhoto}
-            style={{ alignSelf: "flex-start", marginTop: spacing.sm }}
-          />
+          <View style={{ marginTop: 4 }}>
+            {isManager ? (
+              <Tag label="Домоуправител" icon="business" color={routeColors.manager.solid} outline />
+            ) : (
+              <Tag label="Resident" icon="home" bg={colors.sand} />
+            )}
+          </View>
         </View>
       </View>
+
+      <Card style={styles.list}>
+        <SettingRow
+          icon="camera"
+          label={uploading ? "Uploading photo…" : avatarUrl ? "Change photo" : "Add photo"}
+          onPress={uploading ? undefined : changePhoto}
+        />
+        {canSwitch ? (
+          <SettingRow
+            icon="swap-horizontal"
+            label={switching ? "Switching…" : isManager ? "Switch to resident" : "Switch to building manager"}
+            hint="Demo only"
+            onPress={switching ? undefined : toggleRole}
+            divider
+          />
+        ) : null}
+      </Card>
 
       {loading ? (
         <Loading />
       ) : (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Your details</Text>
-          {error ? (
-            <Text style={styles.warning}>
-              Couldn't load your profile: {error}. Check that the profiles table exists and you have a row in it.
-            </Text>
-          ) : null}
-          <Input label="Full name" placeholder="Maria Ivanova" value={fullName} onChangeText={setFullName} />
-          <Input
-            label="Username"
-            placeholder="maria"
-            autoCapitalize="none"
-            autoCorrect={false}
-            value={username}
-            onChangeText={setUsername}
-          />
-          <Button title="Save profile" loading={saving} onPress={save} />
-        </View>
+        <>
+          <SectionTitle>Your details</SectionTitle>
+          <Card style={styles.details}>
+            {error ? (
+              <Text style={styles.warning}>
+                Couldn&apos;t load your profile: {error}. Check that the profiles table exists and you have a row in it.
+              </Text>
+            ) : null}
+            <Input label="Full name" placeholder="Maria Ivanova" value={fullName} onChangeText={setFullName} />
+            <Input
+              label="Username"
+              placeholder="maria"
+              autoCapitalize="none"
+              autoCorrect={false}
+              value={username}
+              onChangeText={setUsername}
+            />
+            <Button title="Save profile" loading={saving} onPress={save} />
+          </Card>
+        </>
       )}
 
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Role</Text>
-        <Text style={styles.email}>
-          You are using the app as {role === "manager" ? "the building manager (домоуправител)" : "a resident"}.
-        </Text>
-        {canSwitch ? (
-          <Button
-            title={role === "manager" ? "Switch to resident" : "Switch to building manager"}
-            icon="swap-horizontal"
-            variant="secondary"
-            loading={switching}
-            onPress={toggleRole}
-          />
-        ) : null}
-      </View>
-
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Account</Text>
-        <Button title="Log out" icon="log-out-outline" variant="secondary" onPress={onLogout} />
-      </View>
+      <Button title="Log out" icon="log-out-outline" variant="danger" onPress={onLogout} style={{ marginTop: spacing.xl }} />
     </ScreenWrapper>
+  );
+}
+
+type SettingRowProps = {
+  icon: ComponentProps<typeof IconTile>["icon"];
+  label: string;
+  hint?: string;
+  onPress?: () => void;
+  divider?: boolean;
+};
+
+function SettingRow({ icon, label, hint, onPress, divider }: SettingRowProps) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      disabled={!onPress}
+      onPress={onPress}
+      style={({ pressed }) => [styles.setting, divider && styles.divider, pressed && { opacity: 0.7 }]}
+    >
+      <IconTile icon={icon} size={40} />
+      <View style={{ flex: 1 }}>
+        <Text style={styles.settingLabel}>{label}</Text>
+        {hint ? <Text style={styles.caption}>{hint}</Text> : null}
+      </View>
+      <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   page: { maxWidth: 640, width: "100%", alignSelf: "center" },
-  identity: {
+  hero: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.lg,
+    gap: spacing.md,
     padding: spacing.lg,
     borderRadius: radius.xl,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.accentSoft,
   },
   name: { ...typography.h2, color: colors.ink },
-  email: { ...typography.body, color: colors.textMuted },
-  section: { gap: spacing.md, marginTop: spacing.xl },
-  sectionTitle: { ...typography.h2, color: colors.ink },
+  caption: { ...typography.caption, color: colors.textMuted },
+  list: { marginTop: spacing.lg, paddingVertical: spacing.xs },
+  setting: { flexDirection: "row", alignItems: "center", gap: spacing.md, minHeight: 56, paddingVertical: spacing.sm },
+  divider: { borderTopWidth: 1, borderTopColor: colors.border },
+  settingLabel: { ...typography.h3, color: colors.ink },
+  details: { gap: spacing.md, padding: spacing.lg },
   warning: {
     ...typography.caption,
     color: colors.error,

@@ -3,19 +3,19 @@ import { Tabs } from "expo-router";
 import { ComponentProps } from "react";
 import { View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { colors, fonts } from "../../constants/theme";
+import { colors, fonts, shadow } from "../../constants/theme";
 import { useRole } from "../../context/RoleContext";
 
 type IconName = ComponentProps<typeof Ionicons>["name"];
 
-// Active tab gets a marigold pill behind a filled icon
+// Active tab gets a tangerine pill behind a filled icon
 function TabIcon({ name, focused }: { name: string; focused: boolean }) {
   return (
     <View
       style={{
-        width: 54,
-        height: 30,
-        borderRadius: 15,
+        width: 56,
+        height: 32,
+        borderRadius: 16,
         alignItems: "center",
         justifyContent: "center",
         backgroundColor: focused ? colors.accent : "transparent",
@@ -41,17 +41,23 @@ export default function TabsLayout() {
         headerShown: false,
         tabBarActiveTintColor: colors.ink,
         tabBarInactiveTintColor: colors.textMuted,
+        // Floating pill; ScreenWrapper pads scroll content so nothing hides behind it
         tabBarStyle: {
-          backgroundColor: colors.surface,
+          position: "absolute",
+          left: 0,
+          right: 0,
+          bottom: insets.bottom + 12,
+          marginHorizontal: 16,
+          height: 72,
+          paddingTop: 10,
+          paddingBottom: 10,
+          borderRadius: 36,
           borderTopWidth: 0,
-          elevation: 0,
-          // Taller than default so the icon pill and label both fit
-          height: 68 + insets.bottom,
-          paddingTop: 6,
-          paddingBottom: insets.bottom + 6,
+          backgroundColor: colors.surface,
+          ...shadow.float,
         },
         tabBarLabelStyle: { fontFamily: fonts.semibold, fontSize: 12, lineHeight: 16, marginTop: 2 },
-        tabBarIconStyle: { height: 30 },
+        tabBarIconStyle: { height: 32 },
         sceneStyle: { backgroundColor: colors.background },
       }}
     >

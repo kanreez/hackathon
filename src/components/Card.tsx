@@ -1,12 +1,12 @@
 import { Pressable, StyleProp, StyleSheet, View, ViewProps, ViewStyle } from "react-native";
-import { colors, radius, spacing } from "../constants/theme";
+import { colors, radius, shadow, spacing } from "../constants/theme";
 
 type Props = ViewProps & {
   onPress?: () => void;
   style?: StyleProp<ViewStyle>;
 };
 
-// Flat white surface. Pass onPress to make it tappable.
+// Warm surface with a soft shadow. Pass onPress to make it tappable.
 export function Card({ style, children, onPress, ...rest }: Props) {
   if (onPress) {
     return (
@@ -32,6 +32,7 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     borderRadius: radius.lg,
     backgroundColor: colors.surface,
+    ...shadow.card,
   },
-  pressed: { opacity: 0.8 },
+  pressed: { transform: [{ scale: 0.98 }] },
 });

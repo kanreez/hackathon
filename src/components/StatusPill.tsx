@@ -10,10 +10,10 @@ export const STATUS_LABEL: Record<ReportStatus, string> = {
 };
 
 const STATUS_COLORS: Record<ReportStatus, { bg: string; fg: string }> = {
-  new: { bg: colors.secondary, fg: colors.ink },
-  sent: { bg: colors.accentSoft, fg: colors.ink },
+  new: { bg: colors.sand, fg: colors.ink },
+  sent: { bg: colors.accentSoft, fg: colors.accentDeep },
   in_progress: { bg: colors.ink, fg: colors.white },
-  fixed: { bg: "#DDF3EA", fg: colors.success },
+  fixed: { bg: colors.successSoft, fg: colors.success },
 };
 
 export function StatusPill({ status }: { status: ReportStatus }) {
@@ -28,13 +28,13 @@ export function StatusPill({ status }: { status: ReportStatus }) {
 export function SeverityPill({ severity }: { severity: Severity }) {
   const loud = severity === "emergency" || severity === "high";
   return (
-    <View style={[styles.pill, { backgroundColor: loud ? colors.error : colors.secondary }]}>
+    <View style={[styles.pill, { backgroundColor: loud ? colors.error : colors.sand }]}>
       <Text style={[styles.text, { color: loud ? colors.white : colors.ink }]}>{severity}</Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  pill: { alignSelf: "flex-start", paddingHorizontal: 10, paddingVertical: 4, borderRadius: radius.pill },
+  pill: { alignSelf: "flex-start", paddingHorizontal: 12, paddingVertical: 5, borderRadius: radius.pill },
   text: { ...typography.label, fontSize: 12, lineHeight: 15, textTransform: "capitalize" },
 });

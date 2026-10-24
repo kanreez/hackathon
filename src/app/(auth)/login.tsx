@@ -1,7 +1,9 @@
 import { Link } from "expo-router";
 import { useState } from "react";
 import { Text, View } from "react-native";
+import { StickerHeadline } from "../../components/Bits";
 import { BrandMark } from "../../components/BrandMark";
+import { APP_TAGLINE } from "../../constants/app";
 import { Button } from "../../components/Button";
 import { Input } from "../../components/Input";
 import { ScreenWrapper } from "../../components/ScreenWrapper";
@@ -31,8 +33,9 @@ export default function Login() {
     <ScreenWrapper scroll style={styles.page}>
       <BrandMark />
       <View style={styles.intro}>
+        <StickerHeadline lead="Snap it." sticker="Fix it." />
+        <Text style={styles.subtitle}>{APP_TAGLINE}</Text>
         <Text style={styles.title}>Welcome back</Text>
-        <Text style={styles.subtitle}>Log in to pick up where you left off.</Text>
       </View>
       <View style={styles.form}>
         <Input
@@ -54,7 +57,7 @@ export default function Login() {
           onSubmitEditing={onSubmit}
           error={error}
         />
-        <Button title="Log in" loading={loading} onPress={onSubmit} style={styles.submit} />
+        <Button title="Log in" variant="accent" loading={loading} onPress={onSubmit} style={styles.submit} />
       </View>
       <Text style={styles.footer}>
         New here?{" "}

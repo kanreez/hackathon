@@ -1,7 +1,9 @@
 import { Link } from "expo-router";
 import { useState } from "react";
 import { Text, View } from "react-native";
+import { StickerHeadline } from "../../components/Bits";
 import { BrandMark } from "../../components/BrandMark";
+import { APP_TAGLINE } from "../../constants/app";
 import { Button } from "../../components/Button";
 import { Input } from "../../components/Input";
 import { ScreenWrapper } from "../../components/ScreenWrapper";
@@ -37,8 +39,9 @@ export default function Register() {
     <ScreenWrapper scroll style={styles.page}>
       <BrandMark />
       <View style={styles.intro}>
+        <StickerHeadline lead="Snap it." sticker="Fix it." />
+        <Text style={styles.subtitle}>{APP_TAGLINE}</Text>
         <Text style={styles.title}>Create your account</Text>
-        <Text style={styles.subtitle}>It takes less than a minute.</Text>
       </View>
       <View style={styles.form}>
         <Input label="Full name" placeholder="Maria Ivanova" autoComplete="name" value={fullName} onChangeText={setFullName} />
@@ -61,7 +64,7 @@ export default function Register() {
           onSubmitEditing={onSubmit}
           error={error}
         />
-        <Button title="Create account" loading={loading} onPress={onSubmit} style={styles.submit} />
+        <Button title="Create account" variant="accent" loading={loading} onPress={onSubmit} style={styles.submit} />
         {info ? <Text style={{ ...typography.label, color: colors.success }}>{info}</Text> : null}
       </View>
       <Text style={styles.footer}>

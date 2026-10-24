@@ -20,8 +20,8 @@ export function Chip({ label, selected = false, onPress, icon }: ChipProps) {
       disabled={!onPress}
       style={({ pressed }) => [
         styles.chip,
-        { backgroundColor: selected ? colors.ink : colors.surface },
-        pressed && { opacity: 0.75 },
+        { backgroundColor: selected ? colors.ink : colors.surface, borderColor: selected ? colors.ink : colors.border },
+        pressed && { transform: [{ scale: 0.97 }] },
       ]}
     >
       {icon ? <Ionicons name={icon} size={14} color={fg} /> : null}
@@ -64,8 +64,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 6,
     paddingHorizontal: 14,
-    paddingVertical: 8,
-    minHeight: 36,
+    minHeight: 40,
+    borderWidth: 1,
     borderRadius: radius.pill,
   },
   text: { ...typography.label },

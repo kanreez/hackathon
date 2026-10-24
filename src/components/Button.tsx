@@ -1,9 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
 import { ComponentProps } from "react";
 import { ActivityIndicator, Pressable, PressableProps, StyleSheet, Text } from "react-native";
-import { colors, radius, spacing, typography } from "../constants/theme";
+import { colors, radius, shadow, spacing, typography } from "../constants/theme";
 
-type Variant = "primary" | "secondary" | "ghost" | "danger";
+// accent = tangerine step forward: one per screen
+type Variant = "primary" | "accent" | "secondary" | "ghost" | "danger";
 
 type Props = Omit<PressableProps, "children"> & {
   title: string;
@@ -15,9 +16,10 @@ type Props = Omit<PressableProps, "children"> & {
 
 const palette: Record<Variant, { bg: string; fg: string; pressed: string }> = {
   primary: { bg: colors.ink, fg: colors.white, pressed: colors.inkSoft },
-  secondary: { bg: colors.secondary, fg: colors.ink, pressed: colors.border },
-  ghost: { bg: "transparent", fg: colors.ink, pressed: colors.secondary },
-  danger: { bg: colors.errorSoft, fg: colors.error, pressed: "#F6D3D3" },
+  accent: { bg: colors.accent, fg: colors.ink, pressed: colors.accent },
+  secondary: { bg: colors.sand, fg: colors.ink, pressed: colors.border },
+  ghost: { bg: "transparent", fg: colors.ink, pressed: colors.sand },
+  danger: { bg: colors.errorSoft, fg: colors.error, pressed: colors.errorSoft },
 };
 
 export function Button({
@@ -42,6 +44,8 @@ export function Button({
         styles.base,
         size === "sm" && styles.sm,
         { backgroundColor: state.pressed ? p.pressed : p.bg },
+        variant === "accent" && !isDisabled && shadow.glow,
+        state.pressed && styles.pressed,
         isDisabled && styles.disabled,
         typeof style === "function" ? style(state) : style,
       ]}
@@ -61,7 +65,7 @@ export function Button({
 
 const styles = StyleSheet.create({
   base: {
-    minHeight: 52,
+    minHeight: 56,
     paddingHorizontal: spacing.lg,
     borderRadius: radius.pill,
     flexDirection: "row",
@@ -69,7 +73,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: spacing.sm,
   },
-  sm: { minHeight: 38, paddingHorizontal: spacing.md },
+  sm: { minHeight: 44, paddingHorizontal: spacing.md },
+  pressed: { transform: [{ scale: 0.97 }] },
   disabled: { opacity: 0.45 },
   text: { ...typography.label, fontSize: 16 },
   textSm: { fontSize: 14 },
