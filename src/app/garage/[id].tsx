@@ -31,6 +31,7 @@ import {
   startOfDay,
   startOfHour,
 } from "../../utils/booking";
+import { isAvailable, summarizeAvailability } from "../../utils/availability";
 import { openDirections } from "../../utils/maps";
 
 type IconName = ComponentProps<typeof Ionicons>["name"];
@@ -115,6 +116,7 @@ function BookForm({ garage, busy, from, to }: { garage: Garage; busy: BusySlot[]
   }
   const total = priceFor(garage, start, end, mode);
   const clash = busy.find((b) => overlaps(start, end, b));
+  const outsideHours = !isAvailable(garage, start, end);
   const dayOptions = Array.from({ length: DAYS_AHEAD }, (_, i) => addDays(startOfDay(now), i));
 
   const confirm = async () => {
@@ -144,6 +146,8 @@ function BookForm({ garage, busy, from, to }: { garage: Garage; busy: BusySlot[]
         <Fact icon={garage.covered ? "umbrella" : "sunny"} label="Type" value={garage.covered ? "Covered" : "Open-air"} divider />
         <Fact icon={app ? "phone-portrait" : "key"} label="Access" value={ACCESS_META[garage.access].label} hint={ACCESS_META[garage.access].hint} divider accent={app} />
         <Fact icon="cash" label="Price" value={`${formatMoney(garage.price_hour)} per hour · ${formatMoney(garage.price_day)} per day`} divider />
+        <Fact icon="calendar" label="Free" value={summarizeAvailability(garage.availability)} divider />
+        {garage.description ? <Text style={styles.description}>{garage.description}</Text> : null}
         <Button title="Directions" icon="navigate" variant="secondary" size="sm" onPress={() => openDirections(garage)} style={{ alignSelf: "flex-start", marginTop: spacing.sm }} />
       </Card>
 
@@ -217,6 +221,13 @@ function BookForm({ garage, busy, from, to }: { garage: Garage; busy: BusySlot[]
           <Ionicons name="alert-circle" size={18} color={colors.error} />
           <Text style={styles.clashText}>Already booked {formatRange(clash.starts_at, clash.ends_at)}. Pick another time.</Text>
         </View>
+      ) : outsideHours ? (
+        <View style={styles.clash} accessibilityRole="alert">
+          <Ionicons name="alert-circle" size={18} color={colors.error} />
+          <Text style={styles.clashText}>
+            The host only rents it out {summarizeAvailability(garage.availability)}. Pick a time inside those hours.
+          </Text>
+        </View>
       ) : null}
 
       <Button
@@ -224,7 +235,7 @@ function BookForm({ garage, busy, from, to }: { garage: Garage; busy: BusySlot[]
         icon="checkmark"
         variant="accent"
         loading={saving}
-        disabled={!!clash}
+        disabled={!!clash || outsideHours}
         onPress={confirm}
         style={{ marginTop: spacing.lg }}
       />
@@ -332,5 +343,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.errorSoft,
   },
   clashText: { ...typography.label, color: colors.error, flex: 1 },
+  description: { ...typography.body, color: colors.ink, paddingTop: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border },
   note: { ...typography.caption, color: colors.textMuted, textAlign: "center", marginTop: spacing.sm },
 });

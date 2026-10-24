@@ -34,6 +34,11 @@ export async function createGarage(input: GarageInput) {
   return (await api.post<{ garage: Garage }>("/api/garages", input)).garage;
 }
 
+// Host only: the server refuses edits to someone else's garage
+export async function updateGarage(id: string, input: GarageInput) {
+  return (await api.patch<{ garage: Garage }>(`/api/garages/${id}`, input)).garage;
+}
+
 export async function createBooking(garageId: string, startsAt: Date, endsAt: Date, mode: BookingMode) {
   const res = await api.post<{ booking: Booking }>("/api/bookings", {
     garage_id: garageId,

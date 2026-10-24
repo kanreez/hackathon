@@ -16,6 +16,8 @@ const seedGarage = (id, fields) => ({
   id,
   host_id: null,
   image_url: null,
+  description: null,
+  availability: null,
   device_key: SEED_KEYS[id] ?? newDeviceKey(),
   created_at: new Date().toISOString(),
   ...fields,
@@ -37,6 +39,8 @@ const SEED_GARAGES = [
   seedGarage("g4", {
     title: "Open yard spot, Hristo Botev (sample)", area: "Lagera", address: "bul. Hristo Botev 64",
     latitude: 42.6905, longitude: 23.3041, size: "medium", covered: false, price_hour: 1.5, price_day: 9, access: "manual",
+    // Host parks here evenings and weekends, so it's free Mon–Fri 08:00–18:00
+    availability: [1, 2, 3, 4, 5].map((day) => ({ day, start: 8, end: 18 })),
   }),
   seedGarage("g5", {
     title: "Basement garage, Hladilnika (sample)", area: "Krasno Selo", address: "ul. Kozyak 8",
@@ -101,6 +105,15 @@ function createRepo(supabase) {
     if (await hasTable("garages")) return must(await supabase.from("garages").insert(row).select("*").single());
     const garage = { id: crypto.randomUUID(), created_at: new Date().toISOString(), image_url: null, ...row };
     mem.garages.push(garage);
+    return garage;
+  }
+
+  // The caller checks the host owns it; device_key and host_id are never changed here
+  async function updateGarage(id, fields) {
+    if (await hasTable("garages")) return must(await supabase.from("garages").update(fields).eq("id", id).select("*").single());
+    const garage = mem.garages.find((g) => g.id === id);
+    if (!garage) return null;
+    Object.assign(garage, fields);
     return garage;
   }
 
@@ -222,6 +235,7 @@ function createRepo(supabase) {
     getGarageByDeviceKey,
     listGaragesByHost,
     createGarage,
+    updateGarage,
     listBookingsForGarage,
     listAllConfirmedBookings,
     listBookingsByRenter,

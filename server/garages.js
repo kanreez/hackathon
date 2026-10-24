@@ -29,6 +29,49 @@ function priceFor(garage, startsAt, endsAt, mode) {
   return Math.ceil(hours) * Number(garage.price_hour);
 }
 
+// Every area is in Sofia, so availability hours are Sofia wall-clock time
+const GARAGE_TZ = "Europe/Sofia";
+const DESCRIPTION_MAX = 500;
+
+// Host input -> null (free any time) or a clean list of weekly windows
+// [{ day: 0-6 (0 = Sunday), start: 0-23, end: 1-24 }], at most one per day, sorted.
+// Returns { error } when the input is not usable.
+function normalizeAvailability(input) {
+  if (input == null) return { availability: null };
+  if (!Array.isArray(input)) return { error: "availability must be a list of weekly hours" };
+  const byDay = new Map();
+  for (const w of input) {
+    const day = Number(w?.day);
+    const start = Number(w?.start);
+    const end = Number(w?.end);
+    if (![day, start, end].every(Number.isInteger) || day < 0 || day > 6 || start < 0 || end > 24 || end <= start) {
+      return { error: "each availability window needs a day 0-6 and whole hours with start before end" };
+    }
+    if (byDay.has(day)) return { error: "availability can have one window per day" };
+    byDay.set(day, { day, start, end });
+  }
+  if (!byDay.size) return { error: "pick at least one day the garage is free, or make it free any time" };
+  return { availability: [...byDay.values()].sort((a, b) => a.day - b.day) };
+}
+
+const sofiaClock = new Intl.DateTimeFormat("en-US", { timeZone: GARAGE_TZ, weekday: "short", hour: "numeric", hourCycle: "h23" });
+const WEEKDAY_INDEX = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+
+// Is the garage free for every hour of [start, end)? Bookings are whole hours, so checking
+// the start of each hour is enough. Mirrors isAvailable in src/utils/availability.ts.
+function isAvailable(garage, start, end) {
+  const windows = garage.availability;
+  if (!windows) return true;
+  const endMs = new Date(end).getTime();
+  for (let t = new Date(start).getTime(); t < endMs; t += HOUR_MS) {
+    const parts = Object.fromEntries(sofiaClock.formatToParts(new Date(t)).map((p) => [p.type, p.value]));
+    const day = WEEKDAY_INDEX[parts.weekday];
+    const hour = Number(parts.hour);
+    if (!windows.some((w) => w.day === day && hour >= w.start && hour < w.end)) return false;
+  }
+  return true;
+}
+
 // The renter's copy of a garage: never includes the device secret
 function publicGarage(g) {
   const { device_key: _key, ...rest } = g;
@@ -116,6 +159,10 @@ module.exports = {
   fits,
   overlaps,
   priceFor,
+  GARAGE_TZ,
+  DESCRIPTION_MAX,
+  normalizeAvailability,
+  isAvailable,
   publicGarage,
   SEARCH_SCHEMA,
   SEARCH_SYSTEM,

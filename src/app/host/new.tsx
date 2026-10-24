@@ -1,17 +1,20 @@
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
+import { AvailabilityEditor } from "../../components/AvailabilityEditor";
 import { Button } from "../../components/Button";
 import { Card } from "../../components/Card";
 import { ChipRow } from "../../components/Chip";
 import { Header } from "../../components/Header";
 import { Input } from "../../components/Input";
 import { ScreenWrapper } from "../../components/ScreenWrapper";
+import { ErrorState, Loading } from "../../components/StateViews";
 import { notify } from "../../components/Toast";
 import { ACCESS_META, AREAS, SIZE_META } from "../../constants/garages";
 import { colors, spacing, typography } from "../../constants/theme";
-import { createGarage } from "../../services/garages";
-import { Access, GarageSize } from "../../types/garage";
+import { useAsync } from "../../hooks/useAsync";
+import { createGarage, getGarage, updateGarage } from "../../services/garages";
+import { Access, AvailabilityWindow, Garage, GarageInput, GarageSize } from "../../types/garage";
 import { Coords, getCurrentLocation } from "../../utils/location";
 
 const AREA_OPTIONS = AREAS.map((a) => ({ value: a, label: a }));
@@ -24,18 +27,41 @@ const ACCESS_OPTIONS = (Object.keys(ACCESS_META) as Access[]).map((a) => ({ valu
 
 const toNumber = (s: string) => Number(s.replace(",", "."));
 
-// Host side: list a garage. No photo upload, only an optional image link.
-export default function NewGarage() {
-  const [title, setTitle] = useState("");
-  const [area, setArea] = useState<(typeof AREAS)[number]>(AREAS[0]);
-  const [address, setAddress] = useState("");
-  const [coords, setCoords] = useState<Coords | null>(null);
-  const [size, setSize] = useState<GarageSize>("medium");
-  const [cover, setCover] = useState<"covered" | "open">("covered");
-  const [priceHour, setPriceHour] = useState("");
-  const [priceDay, setPriceDay] = useState("");
-  const [access, setAccess] = useState<Access>("app");
-  const [imageUrl, setImageUrl] = useState("");
+type Area = (typeof AREAS)[number];
+const isArea = (a: string): a is Area => (AREAS as readonly string[]).includes(a);
+
+// Host side: list a garage, or edit one with ?id=. No photo upload, only an optional image link.
+export default function GarageFormScreen() {
+  const { id } = useLocalSearchParams<{ id?: string }>();
+  const { data, loading, error, reload } = useAsync(() => (id ? getGarage(id) : Promise.resolve(null)), [id]);
+
+  if (!id) return <GarageForm />;
+  if (loading || error || !data) {
+    return (
+      <ScreenWrapper>
+        <Header eyebrow="Host" title="Edit garage" back />
+        {loading ? <Loading /> : <ErrorState message={error ?? "Garage not found"} onRetry={reload} />}
+      </ScreenWrapper>
+    );
+  }
+  return <GarageForm garage={data.garage} />;
+}
+
+function GarageForm({ garage }: { garage?: Garage }) {
+  const [title, setTitle] = useState(garage?.title ?? "");
+  const [area, setArea] = useState<Area>(garage && isArea(garage.area) ? garage.area : AREAS[0]);
+  const [address, setAddress] = useState(garage?.address ?? "");
+  const [coords, setCoords] = useState<Coords | null>(
+    garage?.latitude != null && garage.longitude != null ? { latitude: garage.latitude, longitude: garage.longitude } : null
+  );
+  const [size, setSize] = useState<GarageSize>(garage?.size ?? "medium");
+  const [cover, setCover] = useState<"covered" | "open">(garage && !garage.covered ? "open" : "covered");
+  const [priceHour, setPriceHour] = useState(garage ? String(garage.price_hour) : "");
+  const [priceDay, setPriceDay] = useState(garage ? String(garage.price_day) : "");
+  const [access, setAccess] = useState<Access>(garage?.access ?? "app");
+  const [imageUrl, setImageUrl] = useState(garage?.image_url ?? "");
+  const [description, setDescription] = useState(garage?.description ?? "");
+  const [availability, setAvailability] = useState<AvailabilityWindow[] | null>(garage?.availability ?? null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
 
@@ -54,6 +80,7 @@ export default function NewGarage() {
     if (!(toNumber(priceHour) > 0)) next.priceHour = "Enter a price, like 3 or 2.50.";
     if (!(toNumber(priceDay) > 0)) next.priceDay = "Enter a price, like 20.";
     if (imageUrl.trim() && !/^https?:\/\//.test(imageUrl.trim())) next.imageUrl = "Paste a link starting with https://";
+    if (availability && !availability.length) next.availability = "Turn on at least one day, or choose Any time.";
     setErrors(next);
     return !Object.keys(next).length;
   };
@@ -62,7 +89,7 @@ export default function NewGarage() {
     if (!validate()) return;
     try {
       setSaving(true);
-      await createGarage({
+      const input: GarageInput = {
         title: title.trim(),
         area,
         address: address.trim() || null,
@@ -74,8 +101,16 @@ export default function NewGarage() {
         price_day: toNumber(priceDay),
         access,
         image_url: imageUrl.trim() || null,
-      });
-      notify(access === "app" ? "Listed. Now pair the door's device." : "Garage listed");
+        description: description.trim() || null,
+        availability,
+      };
+      if (garage) {
+        await updateGarage(garage.id, input);
+        notify("Changes saved");
+      } else {
+        await createGarage(input);
+        notify(access === "app" ? "Listed. Now pair the door's device." : "Garage listed");
+      }
       router.back();
     } catch (e: any) {
       notify(e.message, "error");
@@ -86,7 +121,7 @@ export default function NewGarage() {
 
   return (
     <ScreenWrapper scroll style={styles.page}>
-      <Header eyebrow="Host" title="List a garage" back />
+      <Header eyebrow="Host" title={garage ? "Edit garage" : "List a garage"} back />
 
       <Card style={styles.group}>
         <Text style={styles.groupTitle}>Where</Text>
@@ -127,6 +162,21 @@ export default function NewGarage() {
           onChangeText={setImageUrl}
           error={errors.imageUrl}
         />
+        <Input
+          label="Description (optional)"
+          placeholder="2.1 m high door, fits a roof box. Charger socket inside."
+          multiline
+          maxLength={500}
+          value={description}
+          onChangeText={setDescription}
+          hint={`${description.length}/500`}
+          style={{ minHeight: 84 }}
+        />
+      </Card>
+
+      <Card style={styles.group}>
+        <Text style={styles.groupTitle}>{"When it's free"}</Text>
+        <AvailabilityEditor value={availability} onChange={setAvailability} error={errors.availability} />
       </Card>
 
       <Card style={styles.group}>
@@ -149,7 +199,7 @@ export default function NewGarage() {
         </Field>
       </Card>
 
-      <Button title="List garage" icon="checkmark" variant="accent" loading={saving} onPress={save} style={{ marginTop: spacing.sm }} />
+      <Button title={garage ? "Save changes" : "List garage"} icon="checkmark" variant="accent" loading={saving} onPress={save} style={{ marginTop: spacing.sm }} />
     </ScreenWrapper>
   );
 }

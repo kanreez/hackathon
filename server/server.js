@@ -209,9 +209,8 @@ app.get("/api/garages/:id", requireAuth, route(async (req, res) => {
   });
 }));
 
-// Host side: list a garage. The server creates its device key.
-app.post("/api/garages", requireAuth, route(async (req, res) => {
-  const b = req.body || {};
+// Host listing body -> { fields } ready to store, or { error }. Used by create and edit.
+function garageFields(b = {}) {
   const errors = [];
   const title = String(b.title ?? "").trim();
   const area = String(b.area ?? "").trim();
@@ -226,23 +225,47 @@ app.post("/api/garages", requireAuth, route(async (req, res) => {
   const lat = b.latitude == null ? null : Number(b.latitude);
   const lng = b.longitude == null ? null : Number(b.longitude);
   if ((lat != null && !Number.isFinite(lat)) || (lng != null && !Number.isFinite(lng))) errors.push("location is invalid");
-  if (errors.length) return res.status(400).json({ error: errors.join("; ") });
+  const description = String(b.description ?? "").trim();
+  if (description.length > G.DESCRIPTION_MAX) errors.push(`description can be at most ${G.DESCRIPTION_MAX} characters`);
+  const { availability, error: availabilityError } = G.normalizeAvailability(b.availability);
+  if (availabilityError) errors.push(availabilityError);
+  if (errors.length) return { error: errors.join("; ") };
 
-  const garage = await repo.createGarage({
-    host_id: req.user.id,
-    title: title.slice(0, 120),
-    area: area.slice(0, 80),
-    address: String(b.address ?? "").trim().slice(0, 160) || null,
-    latitude: lat,
-    longitude: lng,
-    size: b.size,
-    covered: !!b.covered,
-    price_hour: priceHour,
-    price_day: priceDay,
-    access: b.access,
-    image_url: /^https?:\/\//.test(b.image_url ?? "") ? String(b.image_url).slice(0, 500) : null,
-  });
+  return {
+    fields: {
+      title: title.slice(0, 120),
+      area: area.slice(0, 80),
+      address: String(b.address ?? "").trim().slice(0, 160) || null,
+      latitude: lat,
+      longitude: lng,
+      size: b.size,
+      covered: !!b.covered,
+      price_hour: priceHour,
+      price_day: priceDay,
+      access: b.access,
+      image_url: /^https?:\/\//.test(b.image_url ?? "") ? String(b.image_url).slice(0, 500) : null,
+      description: description || null,
+      availability,
+    },
+  };
+}
+
+// Host side: list a garage. The server creates its device key.
+app.post("/api/garages", requireAuth, route(async (req, res) => {
+  const { fields, error } = garageFields(req.body);
+  if (error) return res.status(400).json({ error });
+  const garage = await repo.createGarage({ host_id: req.user.id, ...fields });
   res.status(201).json({ garage });
+}));
+
+// Host side: edit your own listing (prices, location, specs, free hours). Existing bookings stay.
+app.patch("/api/garages/:id", requireAuth, route(async (req, res) => {
+  const garage = await repo.getGarage(req.params.id);
+  if (!garage) return res.status(404).json({ error: "Garage not found" });
+  if (garage.host_id !== req.user.id) return res.status(403).json({ error: "Only the garage's host can edit it" });
+  const { fields, error } = garageFields(req.body);
+  if (error) return res.status(400).json({ error });
+  res.json({ garage: await repo.updateGarage(garage.id, fields) });
 }));
 
 // Plain-language search -> AI filters -> matching garages
@@ -281,6 +304,7 @@ app.post("/api/garages/search", requireAuth, route(async (req, res) => {
     (g) =>
       G.fits(g.size, filters.vehicle_size) &&
       (filters.covered !== true || g.covered) &&
+      (!fromUtc || G.isAvailable(g, fromUtc, toUtc)) &&
       (!fromUtc || !bookings.some((b) => b.garage_id === g.id && G.overlaps(b.starts_at, b.ends_at, fromUtc, toUtc)))
   );
   const area = G.AREAS.find((a) => a.name === filters.area);
@@ -313,6 +337,10 @@ app.post("/api/bookings", requireAuth, route(async (req, res) => {
   // A booking may start at the top of the current hour, not earlier
   if (start < new Date(Date.now() - G.HOUR_MS)) return res.status(400).json({ error: "That time has already passed" });
   if (end - start > MAX_BOOKING_DAYS * 24 * G.HOUR_MS) return res.status(400).json({ error: `Bookings can be at most ${MAX_BOOKING_DAYS} days` });
+
+  if (!G.isAvailable(garage, start, end)) {
+    return res.status(409).json({ error: "The host hasn't made the garage available then. Pick a time inside its free hours." });
+  }
 
   const existing = await repo.listBookingsForGarage(garage.id);
   if (existing.some((b) => G.overlaps(b.starts_at, b.ends_at, start, end))) {

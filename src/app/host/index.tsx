@@ -13,6 +13,7 @@ import { useAsync } from "../../hooks/useAsync";
 import { useRefreshOnFocus } from "../../hooks/useRefreshOnFocus";
 import { myGarages } from "../../services/garages";
 import { Garage } from "../../types/garage";
+import { summarizeAvailability } from "../../utils/availability";
 import { formatDuration } from "../../utils/booking";
 
 const ONLINE_MS = 10000; // the ESP32 polls every second, so 10 s of silence means it's offline
@@ -47,7 +48,8 @@ export default function HostGarages() {
       ) : (
         garages.map((g) => (
           <View key={g.id} style={{ marginBottom: spacing.md }}>
-            <GarageRow garage={g} />
+            <GarageRow garage={g} onPress={() => router.push({ pathname: "/host/new", params: { id: g.id } })} />
+            <Text style={styles.free}>Free: {summarizeAvailability(g.availability)} · tap to edit</Text>
             {g.access === "app" ? <PairDevice garage={g} /> : null}
           </View>
         ))
@@ -87,6 +89,7 @@ const styles = StyleSheet.create({
   pairHead: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
   pairTitle: { ...typography.h3, color: colors.ink, flex: 1 },
   caption: { ...typography.caption, color: colors.textMuted },
+  free: { ...typography.caption, color: colors.textMuted, marginTop: -spacing.xs, marginBottom: spacing.sm, paddingHorizontal: spacing.sm },
   keyBox: { padding: 12, borderRadius: radius.md, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
   key: { ...typography.label, color: colors.ink, letterSpacing: 0.5 },
 });
