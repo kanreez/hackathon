@@ -1,6 +1,6 @@
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Platform, Pressable, StyleSheet, Text, View, ViewStyle } from "react-native";
 import { SectionTitle, StickerHeadline, Tag } from "../../components/Bits";
 import { Button } from "../../components/Button";
 import { Card } from "../../components/Card";
@@ -13,6 +13,7 @@ import { notify } from "../../components/Toast";
 import { EXAMPLE_QUERIES, SIZE_META } from "../../constants/garages";
 import { colors, radius, spacing, typography } from "../../constants/theme";
 import { useAsync } from "../../hooks/useAsync";
+import { useIsWide } from "../../hooks/useIsWide";
 import { listGarages, searchGarages } from "../../services/garages";
 import { Garage, SearchResult } from "../../types/garage";
 import { formatRange } from "../../utils/booking";
@@ -24,6 +25,7 @@ export default function Find() {
   const [searching, setSearching] = useState(false);
   const [result, setResult] = useState<SearchResult | null>(null);
   const [me, setMe] = useState<Coords | null>(null);
+  const wide = useIsWide();
   const all = useAsync(listGarages);
 
   // Location is optional: without it the list keeps the server's order
@@ -64,9 +66,8 @@ export default function Find() {
   const shown = result ? sortByDistance(result.garages) : sortByDistance(all.data ?? []);
   const others = result && all.data ? sortByDistance(all.data.filter((g) => !result.garages.some((m) => m.id === g.id))) : [];
 
-  return (
-    <ScreenWrapper scroll refreshing={all.refreshing} onRefresh={all.refresh}>
-      <StepTracker active={0} />
+  const ask = (
+    <>
       <Text style={styles.eyebrow}>Find a garage</Text>
       <StickerHeadline lead="Park it" sticker="nearby." />
       <Text style={styles.sub}>Say what you need. We find a garage that fits, and you open it from your phone.</Text>
@@ -107,7 +108,11 @@ export default function Find() {
       </Card>
 
       {result ? <Understood result={result} onClear={() => setResult(null)} /> : null}
+    </>
+  );
 
+  const results = (
+    <>
       <SectionTitle>{result ? (result.garages.length ? "Matches" : "No exact match") : "Garages near you"}</SectionTitle>
       {all.loading && !result ? (
         <Loading />
@@ -127,9 +132,30 @@ export default function Find() {
           ))}
         </>
       ) : null}
+    </>
+  );
+
+  return (
+    <ScreenWrapper scroll refreshing={all.refreshing} onRefresh={all.refresh}>
+      <StepTracker active={0} />
+      {wide ? (
+        // PC: the ask panel stays in view on the left while the results scroll on the right
+        <View style={styles.columns}>
+          <View style={[styles.askColumn, stickyOnWeb]}>{ask}</View>
+          <View style={styles.resultsColumn}>{results}</View>
+        </View>
+      ) : (
+        <>
+          {ask}
+          {results}
+        </>
+      )}
     </ScreenWrapper>
   );
 }
+
+// position: sticky only exists on web; react-native-web passes it through
+const stickyOnWeb = (Platform.OS === "web" ? { position: "sticky", top: spacing.lg } : null) as ViewStyle | null;
 
 // Shows what the AI took from the request, so the renter can trust (or fix) the search
 function Understood({ result, onClear }: { result: SearchResult; onClear: () => void }) {
@@ -189,4 +215,8 @@ const styles = StyleSheet.create({
   clear: { ...typography.label, color: colors.accentDeep, textDecorationLine: "underline" },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   caption: { ...typography.caption, color: colors.textMuted },
+  columns: { flexDirection: "row", alignItems: "flex-start", gap: spacing.xl },
+  askColumn: { width: 420 },
+  // The first SectionTitle's top margin would push the list below the ask panel's top edge
+  resultsColumn: { flex: 1, minWidth: 0, marginTop: -spacing.xl },
 });

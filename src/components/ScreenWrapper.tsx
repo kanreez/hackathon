@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { Edge, SafeAreaView } from "react-native-safe-area-context";
 import { colors, spacing } from "../constants/theme";
+import { useIsWide } from "../hooks/useIsWide";
 
 type Props = {
   children: ReactNode;
@@ -32,7 +33,10 @@ export function ScreenWrapper({
   refreshing,
   onRefresh,
 }: Props) {
-  const padding = padded ? styles.padded : null;
+  const wide = useIsWide();
+  // PC: centred column with roomier padding; no floating tab bar to clear (the sidebar is beside)
+  const padding = padded ? (wide ? styles.paddedWide : styles.padded) : null;
+  const widthCap = wide ? styles.wide : null;
 
   return (
     <SafeAreaView style={styles.safe} edges={edges}>
@@ -42,7 +46,7 @@ export function ScreenWrapper({
       >
         {scroll ? (
           <ScrollView
-            contentContainerStyle={[styles.scrollContent, padding, style]}
+            contentContainerStyle={[styles.scrollContent, wide && styles.scrollContentWide, widthCap, padding, style]}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
             refreshControl={
@@ -54,7 +58,7 @@ export function ScreenWrapper({
             {children}
           </ScrollView>
         ) : (
-          <View style={[styles.flex, padding, style]}>{children}</View>
+          <View style={[styles.flex, widthCap, padding, style]}>{children}</View>
         )}
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -66,5 +70,9 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   // Clears the floating tab bar
   scrollContent: { flexGrow: 1, paddingBottom: 120 },
+  scrollContentWide: { paddingBottom: spacing.xxl },
   padded: { paddingHorizontal: spacing.lg, paddingTop: spacing.md },
+  paddedWide: { paddingHorizontal: spacing.xxl, paddingTop: spacing.xl },
+  // Screens can narrow this further with their own maxWidth in `style`
+  wide: { width: "100%", maxWidth: 1160, alignSelf: "center" },
 });

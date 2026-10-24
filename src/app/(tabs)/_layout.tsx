@@ -3,7 +3,9 @@ import { Tabs } from "expo-router";
 import { ComponentProps } from "react";
 import { View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Sidebar } from "../../components/Sidebar";
 import { colors, fonts, shadow } from "../../constants/theme";
+import { useIsWide } from "../../hooks/useIsWide";
 
 type IconName = ComponentProps<typeof Ionicons>["name"];
 
@@ -31,9 +33,13 @@ function TabIcon({ name, focused }: { name: string; focused: boolean }) {
 
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
+  const wide = useIsWide();
   return (
     <Tabs
+      // PC: a sidebar on the left instead of the floating bar
+      tabBar={wide ? (props) => <Sidebar {...props} /> : undefined}
       screenOptions={{
+        ...(wide ? { tabBarPosition: "left" as const } : null),
         headerShown: false,
         tabBarActiveTintColor: colors.ink,
         tabBarInactiveTintColor: colors.textMuted,

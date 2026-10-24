@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { router, useLocalSearchParams } from "expo-router";
 import { ComponentProps, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View, ViewStyle } from "react-native";
 import { IconTile, SectionTitle } from "../../components/Bits";
 import { Button } from "../../components/Button";
 import { Card } from "../../components/Card";
@@ -15,6 +15,7 @@ import { notify } from "../../components/Toast";
 import { ACCESS_META, SIZE_META } from "../../constants/garages";
 import { colors, radius, shadow, spacing, typography } from "../../constants/theme";
 import { useAsync } from "../../hooks/useAsync";
+import { useIsWide } from "../../hooks/useIsWide";
 import { createBooking, getGarage } from "../../services/garages";
 import { BookingMode, BusySlot, Garage } from "../../types/garage";
 import {
@@ -97,6 +98,7 @@ function BookForm({ garage, busy, from, to }: { garage: Garage; busy: BusySlot[]
   const [hours, setHours] = useState(initial.hours);
   const [days, setDays] = useState(initial.days);
   const [saving, setSaving] = useState(false);
+  const wide = useIsWide();
 
   const now = new Date();
   const minStart = startOfHour(now);
@@ -134,11 +136,8 @@ function BookForm({ garage, busy, from, to }: { garage: Garage; busy: BusySlot[]
 
   const app = garage.access === "app";
 
-  return (
-    <ScreenWrapper scroll>
-      <Header title={garage.title} subtitle={[garage.area, garage.address].filter(Boolean).join(" · ")} back />
-      <StepTracker active={1} />
-
+  const details = (
+    <>
       {garage.image_url ? <Image source={{ uri: garage.image_url }} style={styles.photo} contentFit="cover" /> : null}
 
       <Card style={styles.facts}>
@@ -150,7 +149,11 @@ function BookForm({ garage, busy, from, to }: { garage: Garage; busy: BusySlot[]
         {garage.description ? <Text style={styles.description}>{garage.description}</Text> : null}
         <Button title="Directions" icon="navigate" variant="secondary" size="sm" onPress={() => openDirections(garage)} style={{ alignSelf: "flex-start", marginTop: spacing.sm }} />
       </Card>
+    </>
+  );
 
+  const booking = (
+    <>
       <SectionTitle>When?</SectionTitle>
       <ChipRow options={MODES} value={mode} onChange={setMode} />
 
@@ -242,6 +245,26 @@ function BookForm({ garage, busy, from, to }: { garage: Garage; busy: BusySlot[]
       <Text style={styles.note}>
         {app ? "When your booking starts, open the door from My bookings." : "The host will let you in at the start time."}
       </Text>
+    </>
+  );
+
+  return (
+    <ScreenWrapper scroll>
+      <Header title={garage.title} subtitle={[garage.area, garage.address].filter(Boolean).join(" · ")} back />
+      <StepTracker active={1} />
+
+      {wide ? (
+        // PC: garage details on the left, the booking panel beside them
+        <View style={styles.columns}>
+          <View style={styles.detailsColumn}>{details}</View>
+          <View style={[styles.bookingPanel, stickyOnWeb]}>{booking}</View>
+        </View>
+      ) : (
+        <>
+          {details}
+          {booking}
+        </>
+      )}
     </ScreenWrapper>
   );
 }
@@ -295,7 +318,22 @@ function StepButton({ icon, label, onPress, disabled }: { icon: IconName; label:
   );
 }
 
+// position: sticky only exists on web; react-native-web passes it through
+const stickyOnWeb = (Platform.OS === "web" ? { position: "sticky", top: spacing.lg } : null) as ViewStyle | null;
+
 const styles = StyleSheet.create({
+  columns: { flexDirection: "row", alignItems: "flex-start", gap: spacing.xl },
+  detailsColumn: { flex: 1, minWidth: 0 },
+  // "When?" opens with its own top margin, so the panel needs no top padding
+  bookingPanel: {
+    width: 460,
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.lg,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
   photo: { height: 200, borderRadius: radius.xl, backgroundColor: colors.sand, marginBottom: spacing.md },
   facts: { padding: spacing.lg, gap: 0 },
   fact: { flexDirection: "row", alignItems: "center", gap: spacing.md, paddingVertical: 10 },

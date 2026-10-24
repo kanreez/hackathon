@@ -39,7 +39,7 @@ export default function Bookings() {
   const past = bookings.filter((b) => new Date(b.ends_at) <= now);
 
   return (
-    <ScreenWrapper scroll refreshing={refreshing} onRefresh={refresh}>
+    <ScreenWrapper scroll refreshing={refreshing} onRefresh={refresh} style={styles.page}>
       <Header title="My bookings" subtitle={active.length ? "Your garage is ready" : "Book a garage, then open it here"} />
       {loading ? (
         <Loading />
@@ -202,6 +202,7 @@ function BookingRow({ booking, note, muted }: { booking: Booking; note?: string;
 }
 
 const styles = StyleSheet.create({
+  page: { maxWidth: 760, width: "100%", alignSelf: "center" },
   active: { padding: spacing.lg, gap: spacing.sm, borderRadius: radius.xl },
   activeHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   activeTitle: { ...typography.h1, color: colors.ink, marginTop: spacing.xs },

@@ -35,7 +35,7 @@ export default function HostGarages() {
   const garages = data ?? [];
 
   return (
-    <ScreenWrapper scroll refreshing={refreshing} onRefresh={refresh}>
+    <ScreenWrapper scroll refreshing={refreshing} onRefresh={refresh} style={styles.page}>
       <Header eyebrow="Host" title="Your garages" subtitle="Rent out your garage while you don't need it." back backTo="/profile" />
       <Button title="List a garage" icon="add" variant="accent" onPress={() => router.push("/host/new")} />
       <View style={{ height: spacing.lg }} />
@@ -85,6 +85,7 @@ function PairDevice({ garage }: { garage: Garage }) {
 }
 
 const styles = StyleSheet.create({
+  page: { maxWidth: 760, width: "100%", alignSelf: "center" },
   pair: { gap: spacing.sm, marginTop: -spacing.xs, backgroundColor: colors.sand },
   pairHead: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
   pairTitle: { ...typography.h3, color: colors.ink, flex: 1 },
