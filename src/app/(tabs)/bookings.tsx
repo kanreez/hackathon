@@ -1,9 +1,10 @@
 import { router } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { Animated, Easing, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import { IconTile, SectionTitle, Tag } from "../../components/Bits";
 import { Button } from "../../components/Button";
 import { Card } from "../../components/Card";
+import { DoorPanel, DoorVisual } from "../../components/DoorPanel";
 import { Header } from "../../components/Header";
 import { ScreenWrapper } from "../../components/ScreenWrapper";
 import { EmptyState, ErrorState, Loading } from "../../components/StateViews";
@@ -141,26 +142,37 @@ function ActiveBooking({ booking, now }: { booking: Booking; now: Date }) {
   const app = g?.access === "app";
   const next: DoorAction = isOpen ? "close" : "open";
 
+  // The door panel shows the physical door, derived from the command's status
+  const visual: DoorVisual =
+    door.phase === "busy" ? (door.action === "open" ? "opening" : "closing")
+    : door.phase === "done" ? (door.action === "open" ? "open" : "closed")
+    : door.phase === "error" ? "error"
+    : isOpen ? "open" : "closed";
+  const caption =
+    door.phase === "busy" ? "Talking to the door…"
+    : door.phase === "done" ? `${DONE_LABEL[door.action]} ${formatTime(door.at)}`
+    : door.phase === "error" ? door.message
+    : "Stand by the door, then tap Open.";
+
   return (
     <Card style={styles.active}>
       <View style={styles.activeHead}>
-        <Tag label="Active now" icon="radio-button-on" bg={colors.successSoft} color={colors.success} />
-        <Text style={styles.caption}>{formatDuration(left)} left</Text>
+        <Text style={styles.activeTitle} numberOfLines={2}>
+          {g?.title ?? "Garage"}
+        </Text>
+        <View style={styles.leftBox}>
+          <Text style={styles.leftFigure}>{formatDuration(left)}</Text>
+          <Text style={styles.caption}>left, until {formatTime(new Date(booking.ends_at))}</Text>
+        </View>
       </View>
-      <Text style={styles.activeTitle}>{g?.title ?? "Garage"}</Text>
-      <Text style={styles.caption}>
-        {[g?.area, g?.address].filter(Boolean).join(" · ")} · until {formatTime(new Date(booking.ends_at))}
-      </Text>
-      <Text style={styles.paidLine}>
-        Paid {formatCents(amountOf(booking))} · {paidWith(booking)}
-      </Text>
 
       {app ? (
         <>
-          <DoorStatus door={door} />
+          <DoorPanel visual={visual} restingOpen={isOpen} caption={caption} />
           <Button
-            title={door.phase === "busy" ? BUSY_LABEL[door.action] : next === "open" ? "Open garage" : "Close garage"}
+            title={door.phase === "busy" ? BUSY_LABEL[door.action] : door.phase === "error" ? "Try again" : next === "open" ? "Open" : "Close"}
             icon={next === "open" ? "lock-open" : "lock-closed"}
+            // Yellow always means "open the door"; closing is the quiet light button
             variant={next === "open" ? "accent" : "primary"}
             loading={door.phase === "busy"}
             onPress={() => send(next)}
@@ -174,64 +186,16 @@ function ActiveBooking({ booking, now }: { booking: Booking; now: Date }) {
           <Text style={[styles.body, { flex: 1 }]}>The host lets you in for this garage. It doesn&apos;t open from the app.</Text>
         </View>
       )}
+
+      <Text style={styles.paidLine}>
+        Paid {formatCents(amountOf(booking))} with {paidWith(booking)}
+      </Text>
     </Card>
   );
 }
 
 const BUSY_LABEL: Record<DoorAction, string> = { open: "Opening…", close: "Closing…" };
 const DONE_LABEL: Record<DoorAction, string> = { open: "Opened", close: "Closed" };
-
-function DoorStatus({ door }: { door: Door }) {
-  if (door.phase === "idle") return <Text style={styles.hint}>Stand by the door, then tap Open. It opens in a second or two.</Text>;
-  if (door.phase === "busy") {
-    return (
-      <View style={styles.status} accessibilityLiveRegion="polite">
-        <PulseTile />
-        <Text style={styles.statusText}>{BUSY_LABEL[door.action]} waiting for the door</Text>
-      </View>
-    );
-  }
-  if (door.phase === "done") {
-    return (
-      <View style={[styles.status, { backgroundColor: colors.successSoft }]} accessibilityLiveRegion="polite">
-        <IconTile icon={door.action === "open" ? "checkmark" : "lock-closed"} size={40} bg={colors.surface} color={colors.success} />
-        <Text style={[styles.statusText, { color: colors.success }]}>
-          {DONE_LABEL[door.action]} {formatTime(door.at)}
-        </Text>
-      </View>
-    );
-  }
-  return (
-    <View style={[styles.status, { backgroundColor: colors.errorSoft }]} accessibilityRole="alert">
-      <IconTile icon="alert-circle" size={40} bg={colors.surface} color={colors.errorText} />
-      <Text style={[styles.statusText, { color: colors.errorText }]}>{door.message}</Text>
-    </View>
-  );
-}
-
-// Orange tile with a ring that keeps pulsing out while the door command is on its way
-function PulseTile() {
-  const [pulse] = useState(() => new Animated.Value(0));
-  useEffect(() => {
-    const loop = Animated.loop(Animated.timing(pulse, { toValue: 1, duration: 1400, easing: Easing.out(Easing.quad), useNativeDriver: true }));
-    loop.start();
-    return () => loop.stop();
-  }, [pulse]);
-  return (
-    <View style={styles.pulse}>
-      <Animated.View
-        style={[
-          styles.pulseRing,
-          {
-            opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.6, 0] }),
-            transform: [{ scale: pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.8] }) }],
-          },
-        ]}
-      />
-      <IconTile icon="hourglass" size={40} bg={colors.accent} />
-    </View>
-  );
-}
 
 const amountOf = (b: Booking) => b.amount_cents ?? Math.round(b.total_price * 100);
 
@@ -316,24 +280,13 @@ function BookingRow({ booking, now, note, muted, onChanged }: RowProps) {
 
 const styles = StyleSheet.create({
   page: { maxWidth: 760, width: "100%", alignSelf: "center" },
-  active: { padding: spacing.lg, gap: spacing.sm, borderRadius: radius.xl, borderWidth: 2, borderColor: colors.accent },
-  pulse: { width: 40, height: 40, alignItems: "center", justifyContent: "center" },
-  pulseRing: { position: "absolute", width: 40, height: 40, borderRadius: 14, borderWidth: 3, borderColor: colors.accent },
-  activeHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  activeTitle: { ...typography.h1, color: colors.ink, marginTop: spacing.xs },
+  active: { padding: spacing.lg, gap: spacing.md, borderRadius: radius.xl },
+  activeHead: { flexDirection: "row", alignItems: "flex-start", gap: spacing.md },
+  activeTitle: { ...typography.h2, color: colors.ink, flex: 1 },
+  leftBox: { alignItems: "flex-end" },
+  leftFigure: { ...typography.figureSm, color: colors.ink },
   caption: { ...typography.caption, color: colors.textMuted },
   body: { ...typography.body, color: colors.ink },
-  hint: { ...typography.body, color: colors.textMuted, marginTop: spacing.md },
-  status: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.md,
-    marginTop: spacing.md,
-    padding: 12,
-    borderRadius: radius.lg,
-    backgroundColor: colors.accentSoft,
-  },
-  statusText: { ...typography.h3, color: colors.ink, flex: 1 },
   openBtn: { minHeight: 72, marginTop: spacing.md },
   manual: {
     flexDirection: "row",
