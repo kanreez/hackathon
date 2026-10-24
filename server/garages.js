@@ -78,12 +78,33 @@ function buildSearchPrompt(query, nowLocal) {
   ].join("\n");
 }
 
-// "YYYY-MM-DDTHH:mm" in the renter's local time -> ISO in UTC. offsetMin is Date#getTimezoneOffset().
-function localToUtc(local, offsetMin) {
+// Minutes to add to local time to get UTC at instant `ms` in an IANA zone (same sign as
+// Date#getTimezoneOffset). Null if the zone is unknown.
+function zoneOffsetAt(ms, timeZone) {
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone, hourCycle: "h23", year: "numeric", month: "numeric", day: "numeric", hour: "numeric", minute: "numeric",
+    }).formatToParts(new Date(ms));
+    const p = Object.fromEntries(parts.map((x) => [x.type, Number(x.value)]));
+    return (Math.floor(ms / 60000) * 60000 - Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute)) / 60000;
+  } catch {
+    return null;
+  }
+}
+
+// "YYYY-MM-DDTHH:mm" in the renter's local time -> ISO in UTC. Uses the renter's IANA zone so
+// a date on the other side of a DST change gets its own offset; falls back to offsetMin
+// (Date#getTimezoneOffset() at request time) when the zone is missing.
+function localToUtc(local, offsetMin, timeZone) {
   const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(local || "");
   if (!m) return null;
   const [, y, mo, d, h, mi] = m.map(Number);
-  return new Date(Date.UTC(y, mo - 1, d, h, mi) + offsetMin * 60000).toISOString();
+  const asUtc = Date.UTC(y, mo - 1, d, h, mi);
+  let offset = timeZone ? zoneOffsetAt(asUtc, timeZone) : null;
+  if (offset === null) return new Date(asUtc + offsetMin * 60000).toISOString();
+  // Re-check at the corrected instant in case the guess landed across the DST switch
+  offset = zoneOffsetAt(asUtc + offset * 60000, timeZone) ?? offset;
+  return new Date(asUtc + offset * 60000).toISOString();
 }
 
 module.exports = {

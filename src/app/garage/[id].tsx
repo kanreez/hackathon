@@ -7,7 +7,6 @@ import { IconTile, SectionTitle } from "../../components/Bits";
 import { Button } from "../../components/Button";
 import { Card } from "../../components/Card";
 import { ChipRow } from "../../components/Chip";
-import { openInMaps } from "../../components/GarageRow";
 import { Header } from "../../components/Header";
 import { ScreenWrapper } from "../../components/ScreenWrapper";
 import { ErrorState, Loading } from "../../components/StateViews";
@@ -32,6 +31,7 @@ import {
   startOfDay,
   startOfHour,
 } from "../../utils/booking";
+import { openDirections } from "../../utils/maps";
 
 type IconName = ComponentProps<typeof Ionicons>["name"];
 
@@ -144,7 +144,7 @@ function BookForm({ garage, busy, from, to }: { garage: Garage; busy: BusySlot[]
         <Fact icon={garage.covered ? "umbrella" : "sunny"} label="Type" value={garage.covered ? "Covered" : "Open-air"} divider />
         <Fact icon={app ? "phone-portrait" : "key"} label="Access" value={ACCESS_META[garage.access].label} hint={ACCESS_META[garage.access].hint} divider accent={app} />
         <Fact icon="cash" label="Price" value={`${formatMoney(garage.price_hour)} per hour · ${formatMoney(garage.price_day)} per day`} divider />
-        <Button title="Open in maps" icon="navigate" variant="secondary" size="sm" onPress={() => openInMaps(garage)} style={{ alignSelf: "flex-start", marginTop: spacing.sm }} />
+        <Button title="Directions" icon="navigate" variant="secondary" size="sm" onPress={() => openDirections(garage)} style={{ alignSelf: "flex-start", marginTop: spacing.sm }} />
       </Card>
 
       <SectionTitle>When?</SectionTitle>

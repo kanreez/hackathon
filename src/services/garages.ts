@@ -21,6 +21,8 @@ export async function searchGarages(query: string) {
     query,
     now_local: toLocalIso(now),
     tz_offset: now.getTimezoneOffset(),
+    // Lets the server get the offset right for dates across a DST change
+    time_zone: Intl.DateTimeFormat().resolvedOptions().timeZone,
   });
 }
 

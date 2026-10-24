@@ -246,13 +246,14 @@ app.post("/api/garages", requireAuth, route(async (req, res) => {
 }));
 
 // Plain-language search -> AI filters -> matching garages
-// Body: { query, now_local: "YYYY-MM-DDTHH:mm", tz_offset: Date#getTimezoneOffset() }
+// Body: { query, now_local: "YYYY-MM-DDTHH:mm", tz_offset: Date#getTimezoneOffset(), time_zone?: "Europe/Sofia" }
 const searchCache = new Map(); // same question in the same hour -> same filters, no second AI call
 
 app.post("/api/garages/search", requireAuth, route(async (req, res) => {
   const query = String(req.body?.query ?? "").trim();
   const nowLocal = String(req.body?.now_local ?? "");
   const tzOffset = Number(req.body?.tz_offset ?? 0);
+  const timeZone = typeof req.body?.time_zone === "string" ? req.body.time_zone : null;
   if (!query) return res.status(400).json({ error: "Missing query" });
   if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(nowLocal)) return res.status(400).json({ error: "now_local must look like 2026-10-24T16:30" });
 
@@ -271,8 +272,8 @@ app.post("/api/garages/search", requireAuth, route(async (req, res) => {
     searchCache.set(cacheKey, filters);
   }
 
-  let fromUtc = G.localToUtc(filters.from, tzOffset);
-  let toUtc = G.localToUtc(filters.to, tzOffset);
+  let fromUtc = G.localToUtc(filters.from, tzOffset, timeZone);
+  let toUtc = G.localToUtc(filters.to, tzOffset, timeZone);
   if (!fromUtc || !toUtc || new Date(toUtc) <= new Date(fromUtc)) fromUtc = toUtc = null;
 
   const [garages, bookings] = await Promise.all([repo.listGarages(), repo.listAllConfirmedBookings()]);

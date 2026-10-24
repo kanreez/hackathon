@@ -1,8 +1,9 @@
-import { Linking, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import { SIZE_META } from "../constants/garages";
 import { colors, spacing, typography } from "../constants/theme";
 import { Garage } from "../types/garage";
 import { formatMoney } from "../utils/booking";
+import { openDirections } from "../utils/maps";
 import { IconTile, RowAction, Tag } from "./Bits";
 import { Card } from "./Card";
 
@@ -12,18 +13,11 @@ type Props = {
   onPress?: () => void;
 };
 
-export const openInMaps = (g: Pick<Garage, "latitude" | "longitude" | "address" | "title">) =>
-  Linking.openURL(
-    g.latitude != null && g.longitude != null
-      ? `https://www.google.com/maps/search/?api=1&query=${g.latitude},${g.longitude}`
-      : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${g.address ?? g.title}, Sofia`)}`
-  );
-
 export function formatKm(km: number) {
   return km < 1 ? `${Math.round(km * 1000)} m` : `${km.toFixed(1)} km`;
 }
 
-// One garage in a list: access tile, title, where, tags, price, and an "open in maps" action
+// One garage in a list: access tile, title, where, tags, price, and a directions action
 export function GarageRow({ garage: g, distanceKm, onPress }: Props) {
   const app = g.access === "app";
   return (
@@ -50,7 +44,7 @@ export function GarageRow({ garage: g, distanceKm, onPress }: Props) {
           {formatMoney(g.price_hour)}/h · {formatMoney(g.price_day)}/day
         </Text>
       </View>
-      <RowAction icon="navigate" label={`Open ${g.title} in maps`} onPress={() => openInMaps(g)} />
+      <RowAction icon="navigate" label={`Directions to ${g.title}`} onPress={() => openDirections(g)} />
     </Card>
   );
 }
