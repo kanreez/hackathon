@@ -399,4 +399,5 @@ export const bg: Record<keyof typeof en, string> = {
   "err.photoTooBig": "Снимката е твърде голяма. Избери по-малка.",
   "err.photoType": "Този файл не е снимка. Използвай JPEG, PNG или WebP.",
   "err.photoLimit": "Твърде много снимки засега. Опитай пак след час.",
+  "find.wants": "Споменава „{what}“",
 };

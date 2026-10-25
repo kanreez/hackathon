@@ -1,3 +1,4 @@
+const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 // Load server/.env no matter which folder the server is started from
@@ -620,14 +621,45 @@ app.post("/api/garages/search", requireAuth, route(async (req, res) => {
   // Sort and frame around the area asked for, else the city
   const area = G.AREAS.find((a) => a.name === filters.area) ?? G.cityByName(filters.city);
 
+  // "with an EV charger", "on Shipka street"...: keep the garages whose own text says so
+  let found = matches;
+  let wantsChecked = false;
+  if (filters.wants && matches.length) {
+    const ids = await matchListings(filters.wants, matches);
+    if (ids) {
+      found = ids.map((id) => matches.find((g) => g.id === id));
+      wantsChecked = true;
+    }
+  }
+
   res.json({
     filters,
     from_utc: fromUtc,
     to_utc: toUtc,
     center: area ? { latitude: area.latitude, longitude: area.longitude } : null,
-    garages: matches.map((g) => ({ ...G.publicGarage(g), rating: ratings.get(g.id) ?? NO_RATING })),
+    wants_checked: wantsChecked, // false: the check couldn't run, so these only match the other filters
+    garages: found.map((g) => ({ ...G.publicGarage(g), rating: ratings.get(g.id) ?? NO_RATING })),
   });
 }));
+
+// The garages (of `candidates`) whose title, description or address has what the renter wants,
+// best first. Null if the AI couldn't answer: the search then just skips this step.
+const matchCache = new Map(); // wants + the listings' text -> ids
+async function matchListings(wants, candidates) {
+  const listed = candidates.slice(0, G.MAX_LISTINGS);
+  const prompt = G.buildMatchPrompt(wants, listed);
+  const key = crypto.createHash("sha256").update(prompt).digest("hex");
+  if (matchCache.has(key)) return matchCache.get(key);
+  const result = await askWithFallback(
+    { prompt, system: G.MATCH_SYSTEM, json: true, schema: G.MATCH_SCHEMA },
+    (reply) => G.cleanMatch(parseJson(reply), listed.map((g) => g.id))
+  );
+  if (result.error) return null;
+  const ids = result.refused ? [] : result.value;
+  if (matchCache.size > 500) matchCache.clear();
+  matchCache.set(key, ids);
+  return ids;
+}
 
 // ==========================================
 // Bookings

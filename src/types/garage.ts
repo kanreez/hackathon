@@ -142,6 +142,7 @@ export type SearchFilters = {
   to: string | null;
   vehicle_size: GarageSize | null;
   covered: boolean | null;
+  wants: string | null; // what to look for in titles and descriptions: "EV charger", "Shipka street"
 };
 
 export type SearchResult = {
@@ -149,6 +150,7 @@ export type SearchResult = {
   from_utc: string | null;
   to_utc: string | null;
   center: { latitude: number; longitude: number } | null;
+  wants_checked?: boolean; // the garages were checked against `wants` (false: that step was skipped)
   garages: Garage[];
   // Set when the request wasn't about garages, parking or cars; hint is a fixed suggestion
   off_topic?: boolean;

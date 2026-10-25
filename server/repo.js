@@ -28,14 +28,17 @@ const SEED_GARAGES = [
   seedGarage("g1", {
     title: "Covered garage by Pirogov (sample)", area: "Lagera", address: "ul. Tsar Samuil 110",
     latitude: 42.6879, longitude: 23.3009, size: "medium", covered: true, price_hour: 3, price_day: 20, access: "app",
+    description: "EV charger socket (Type 2) on the wall. Door opens from the app. 2.0 m high.",
   }),
   seedGarage("g2", {
     title: "Wide garage with remote door (sample)", area: "Krasno Selo", address: "bul. Tsar Boris III 41",
     latitude: 42.6822, longitude: 23.2901, size: "large", covered: true, price_hour: 4, price_day: 25, access: "app",
+    description: "2.4 m high door: fits vans and cars with a roof box. Security camera at the entrance.",
   }),
   seedGarage("g3", {
     title: "Small box near the metro (sample)", area: "Lagera", address: "ul. Dimitar Petkov 12",
     latitude: 42.6851, longitude: 23.2982, size: "small", covered: true, price_hour: 2, price_day: 12, access: "manual",
+    description: "Two minutes from Konstantin Velichkov metro station. Tight turn in, best for small cars.",
   }),
   seedGarage("g4", {
     title: "Open yard spot, Hristo Botev (sample)", area: "Lagera", address: "bul. Hristo Botev 64",
@@ -50,6 +53,7 @@ const SEED_GARAGES = [
   seedGarage("g6", {
     title: "Garage by South Park (sample)", area: "Lozenets", address: "ul. Krichim 21",
     latitude: 42.6741, longitude: 23.3196, size: "large", covered: true, price_hour: 3.5, price_day: 22, access: "manual",
+    description: "Gated building with a guard, open 24/7. Bike rack inside.",
   }),
   seedGarage("g7", {
     title: "Covered spot on Cherni Vrah (sample)", area: "Lozenets", address: "bul. Cherni Vrah 47",

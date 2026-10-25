@@ -258,6 +258,7 @@ function Understood({ result, onClear }: { result: SearchResult; onClear: () => 
     result.from_utc && result.to_utc ? { label: formatRange(result.from_utc, result.to_utc) } : null,
     f.vehicle_size ? { label: t("find.fits", { what: SIZE_META[f.vehicle_size].fits }) } : null,
     f.covered === true ? { label: t("garage.covered") } : null,
+    f.wants ? { label: t("find.wants", { what: f.wants }) } : null,
   ].filter((c) => c !== null);
 
   return (

@@ -397,4 +397,5 @@ export const en = {
   "err.photoTooBig": "That photo is too big. Pick a smaller one.",
   "err.photoType": "That file isn't a photo. Use a JPEG, PNG or WebP.",
   "err.photoLimit": "Too many photos for now. Try again in an hour.",
+  "find.wants": "Mentions “{what}”",
 };
