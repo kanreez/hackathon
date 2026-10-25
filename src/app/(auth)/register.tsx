@@ -10,10 +10,13 @@ import { ScreenWrapper } from "../../components/ScreenWrapper";
 import { authStyles as styles } from "../../constants/authStyles";
 import { colors, typography } from "../../constants/theme";
 import { useAuth } from "../../context/AuthContext";
+import { useT } from "../../i18n";
 
 export default function Register() {
   const { signup } = useAuth();
-  const [fullName, setFullName] = useState("");
+  const { t } = useT();
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -26,8 +29,11 @@ export default function Register() {
       setLoading(true);
       setError("");
       setInfo("");
-      await signup(email.trim(), password, fullName.trim());
-      setInfo("Account created. If email confirmation is on, check your inbox.");
+      const r = await signup({ firstName: firstName.trim(), lastName: lastName.trim(), email: email.trim(), password });
+      // With a session the app moves on by itself; otherwise the account waits for the email link
+      if (r.needsConfirmation) {
+        setInfo(r.username ? t("register.confirmWithUsername", { username: r.username }) : t("register.confirm"));
+      }
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -39,23 +45,32 @@ export default function Register() {
     <ScreenWrapper scroll style={styles.page}>
       <BrandMark size={64} />
       <View style={styles.intro}>
-        <Headline title="Book it. Open it." subline={APP_TAGLINE} />
-        <Text style={styles.title}>Create your account</Text>
+        <Headline title={t("auth.headline")} subline={APP_TAGLINE()} />
+        <Text style={styles.title}>{t("register.title")}</Text>
       </View>
       <View style={styles.form}>
-        <Input label="Full name" placeholder="Maria Ivanova" autoComplete="name" value={fullName} onChangeText={setFullName} />
+        <View style={{ flexDirection: "row", gap: 8 }}>
+          <View style={{ flex: 1 }}>
+            <Input label={t("register.firstName")} placeholder={t("register.firstNamePlaceholder")} autoComplete="given-name" value={firstName} onChangeText={setFirstName} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Input label={t("register.lastName")} placeholder={t("register.lastNamePlaceholder")} autoComplete="family-name" value={lastName} onChangeText={setLastName} />
+          </View>
+        </View>
+        <Text style={styles.subtitle}>{t("register.usernameNote")}</Text>
         <Input
-          label="Email"
+          label={t("auth.email")}
           placeholder="you@example.com"
           autoCapitalize="none"
+          autoCorrect={false}
           autoComplete="email"
           keyboardType="email-address"
           value={email}
           onChangeText={setEmail}
         />
         <Input
-          label="Password"
-          placeholder="At least 6 characters"
+          label={t("auth.password")}
+          placeholder={t("register.passwordPlaceholder")}
           secureTextEntry
           autoCapitalize="none"
           autoCorrect={false}
@@ -65,13 +80,13 @@ export default function Register() {
           onSubmitEditing={onSubmit}
           error={error}
         />
-        <Button title="Create account" variant="accent" loading={loading} onPress={onSubmit} style={styles.submit} />
+        <Button title={t("register.submit")} variant="accent" loading={loading} onPress={onSubmit} style={styles.submit} />
         {info ? <Text style={{ ...typography.label, color: colors.success }}>{info}</Text> : null}
       </View>
       <Text style={styles.footer}>
-        Already have an account?{" "}
+        {t("register.haveAccount")}{" "}
         <Link href="/login" style={styles.link}>
-          Log in
+          {t("register.logIn")}
         </Link>
       </Text>
     </ScreenWrapper>

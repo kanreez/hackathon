@@ -1,3 +1,4 @@
+import { getLang, t, tn } from "../i18n";
 import { BookingMode, BusySlot, Garage } from "../types/garage";
 
 export const HOUR_MS = 3600000;
@@ -38,7 +39,11 @@ export function priceFor(garage: Pick<Garage, "price_hour" | "price_day">, start
   return Math.ceil(hours) * garage.price_hour;
 }
 
-export const formatMoney = (n: number) => `€${Number.isInteger(n) ? n : n.toFixed(2)}`;
+// "€8.50" in English, "8,50 €" in Bulgarian
+export function formatMoney(n: number) {
+  const amount = Number.isInteger(n) ? String(n) : n.toFixed(2);
+  return getLang() === "bg" ? `${amount.replace(".", ",")} €` : `€${amount}`;
+}
 
 // Payments are integer cents: 850 -> "€8.50", 800 -> "€8"
 export const formatCents = (cents: number) => formatMoney(cents / 100);
@@ -47,10 +52,12 @@ export const formatTime = (d: Date) => `${pad(d.getHours())}:${pad(d.getMinutes(
 
 export function formatDay(d: Date, now = new Date()) {
   const diff = Math.round((startOfDay(d).getTime() - startOfDay(now).getTime()) / DAY_MS);
-  if (diff === 0) return "Today";
-  if (diff === 1) return "Tomorrow";
-  // Some engines write "Sat, 31 Oct": drop the comma so it's always "Sat 31 Oct"
-  return d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" }).replace(",", "");
+  if (diff === 0) return t("date.today");
+  if (diff === 1) return t("date.tomorrow");
+  // Names from the dictionary, not toLocaleDateString: Android's engine may not have Bulgarian
+  const weekday = t("date.weekdaysShort").split(",")[d.getDay()];
+  const month = t("date.monthsShort").split(",")[d.getMonth()];
+  return `${weekday} ${d.getDate()} ${month}`;
 }
 
 // "Today 09:00 – 13:00" or "Sat 31 Oct 00:00 – Sun 1 Nov 00:00"
@@ -66,9 +73,9 @@ export function formatRange(startIso: string | Date, endIso: string | Date) {
 // "2 h 15 min", "45 min", "3 days"
 export function formatDuration(ms: number) {
   const min = Math.max(0, Math.round(ms / 60000));
-  if (min >= 48 * 60) return `${Math.round(min / 1440)} days`;
-  if (min >= 60) return `${Math.floor(min / 60)} h${min % 60 ? ` ${min % 60} min` : ""}`;
-  return `${min} min`;
+  if (min >= 48 * 60) return tn("duration.days", Math.round(min / 1440));
+  if (min >= 60) return min % 60 ? t("duration.hMin", { h: Math.floor(min / 60), m: min % 60 }) : t("duration.h", { h: Math.floor(min / 60) });
+  return t("duration.min", { m: min });
 }
 
 export const overlaps = (aStart: Date, aEnd: Date, slot: BusySlot) =>

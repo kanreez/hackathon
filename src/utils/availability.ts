@@ -1,13 +1,15 @@
+import { t } from "../i18n";
 import { AvailabilityWindow, Garage } from "../types/garage";
 import { HOUR_MS } from "./booking";
 
 // Monday first, as people read a week; values are Date#getDay() numbers
 export const WEEK = [1, 2, 3, 4, 5, 6, 0] as const;
-export const DAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+// Short day names in the current language, indexed like Date#getDay(); call during render
+export const dayShort = (day: number) => t("date.weekdaysShort").split(",")[day];
 
 export const formatHour = (h: number) => `${String(h).padStart(2, "0")}:00`;
 
-const windowLabel = (w: AvailabilityWindow) => (w.start === 0 && w.end === 24 ? "all day" : `${formatHour(w.start)}–${formatHour(w.end)}`);
+const windowLabel = (w: AvailabilityWindow) => (w.start === 0 && w.end === 24 ? t("hours.allDay") : `${formatHour(w.start)}–${formatHour(w.end)}`);
 
 // Same rule as isAvailable in server/garages.js (which uses Sofia time; this uses the
 // phone's clock, the same one the booking picker uses): every hour of [start, end) must
@@ -26,7 +28,7 @@ export function isAvailable(garage: Pick<Garage, "availability">, start: Date, e
 
 // "Mon–Fri 08:00–18:00 · Sat–Sun all day", or "Any time"
 export function summarizeAvailability(windows: AvailabilityWindow[] | null) {
-  if (!windows) return "Any time";
+  if (!windows) return t("hours.anyTime");
   const byDay = new Map(windows.map((w) => [w.day, w]));
   const groups: { first: number; last: number; w: AvailabilityWindow }[] = [];
   for (const day of WEEK) {
@@ -37,10 +39,10 @@ export function summarizeAvailability(windows: AvailabilityWindow[] | null) {
     if (adjacent && prev.w.start === w.start && prev.w.end === w.end) prev.last = day;
     else groups.push({ first: day, last: day, w });
   }
-  if (!groups.length) return "Not available";
+  if (!groups.length) return t("hours.notAvailable");
   return groups
     .map((g) => {
-      const days = g.first === g.last ? DAY_SHORT[g.first] : `${DAY_SHORT[g.first]}–${DAY_SHORT[g.last]}`;
+      const days = g.first === g.last ? dayShort(g.first) : `${dayShort(g.first)}–${dayShort(g.last)}`;
       return `${days} ${windowLabel(g.w)}`;
     })
     .join(" · ");

@@ -9,10 +9,12 @@ import { Input } from "../../components/Input";
 import { ScreenWrapper } from "../../components/ScreenWrapper";
 import { authStyles as styles } from "../../constants/authStyles";
 import { useAuth } from "../../context/AuthContext";
+import { useT } from "../../i18n";
 
 export default function Login() {
   const { login } = useAuth();
-  const [email, setEmail] = useState("");
+  const { t } = useT();
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -21,7 +23,7 @@ export default function Login() {
     try {
       setLoading(true);
       setError("");
-      await login(email.trim(), password);
+      await login(identifier.trim(), password);
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -33,22 +35,22 @@ export default function Login() {
     <ScreenWrapper scroll style={styles.page}>
       <BrandMark size={64} />
       <View style={styles.intro}>
-        <Headline title="Book it. Open it." subline={APP_TAGLINE} />
-        <Text style={styles.title}>Welcome back</Text>
+        <Headline title={t("auth.headline")} subline={APP_TAGLINE()} />
+        <Text style={styles.title}>{t("login.title")}</Text>
       </View>
       <View style={styles.form}>
         <Input
-          label="Email"
-          placeholder="you@example.com"
+          label={t("login.identifier")}
+          placeholder={t("login.identifierPlaceholder")}
           autoCapitalize="none"
-          autoComplete="email"
-          keyboardType="email-address"
-          value={email}
-          onChangeText={setEmail}
+          autoCorrect={false}
+          autoComplete="username"
+          value={identifier}
+          onChangeText={setIdentifier}
         />
         <Input
-          label="Password"
-          placeholder="Your password"
+          label={t("auth.password")}
+          placeholder={t("login.passwordPlaceholder")}
           secureTextEntry
           autoCapitalize="none"
           autoCorrect={false}
@@ -58,12 +60,12 @@ export default function Login() {
           onSubmitEditing={onSubmit}
           error={error}
         />
-        <Button title="Log in" variant="accent" loading={loading} onPress={onSubmit} style={styles.submit} />
+        <Button title={t("login.submit")} variant="accent" loading={loading} onPress={onSubmit} style={styles.submit} />
       </View>
       <Text style={styles.footer}>
-        New here?{" "}
+        {t("login.newHere")}{" "}
         <Link href="/register" style={styles.link}>
-          Create an account
+          {t("login.createAccount")}
         </Link>
       </Text>
     </ScreenWrapper>

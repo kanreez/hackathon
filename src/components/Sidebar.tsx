@@ -4,6 +4,7 @@ import type { BottomTabBarProps } from "expo-router/tabs";
 import { ComponentProps } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { colors, radius, spacing, typography } from "../constants/theme";
+import { useT } from "../i18n";
 import { BrandMark } from "./BrandMark";
 import { Button } from "./Button";
 
@@ -14,6 +15,7 @@ const ICONS: Record<string, string> = { index: "search", bookings: "key", profil
 
 // PC layout: replaces the floating bottom tab bar with a left-hand sidebar
 export function Sidebar({ state, descriptors, emitter, navigateToTab }: BottomTabBarProps) {
+  const { t } = useT();
   return (
     <View style={styles.bar}>
       <View style={styles.brand}>
@@ -54,9 +56,9 @@ export function Sidebar({ state, descriptors, emitter, navigateToTab }: BottomTa
       </View>
 
       <View style={styles.host}>
-        <Text style={styles.hostTitle}>Have a garage?</Text>
-        <Text style={styles.hostBody}>{"Rent it out while you don't need it. You set the price and the hours."}</Text>
-        <Button title="List your garage" icon="add" size="sm" variant="secondary" onPress={() => router.push("/host")} />
+        <Text style={styles.hostTitle}>{t("sidebar.hostTitle")}</Text>
+        <Text style={styles.hostBody}>{t("sidebar.hostBody")}</Text>
+        <Button title={t("sidebar.hostCta")} icon="add" size="sm" variant="secondary" onPress={() => router.push("/host")} />
       </View>
     </View>
   );

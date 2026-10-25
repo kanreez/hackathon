@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Sidebar } from "../../components/Sidebar";
 import { colors, fonts, shadow } from "../../constants/theme";
 import { useIsWide } from "../../hooks/useIsWide";
+import { useT } from "../../i18n";
 
 type IconName = ComponentProps<typeof Ionicons>["name"];
 
@@ -34,6 +35,7 @@ function TabIcon({ name, focused }: { name: string; focused: boolean }) {
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
   const wide = useIsWide();
+  const { t } = useT();
   return (
     <Tabs
       // PC: a sidebar on the left instead of the floating bar
@@ -66,9 +68,9 @@ export default function TabsLayout() {
         sceneStyle: { backgroundColor: colors.background },
       }}
     >
-      <Tabs.Screen name="index" options={{ title: "Find", tabBarIcon: ({ focused }) => <TabIcon name="search" focused={focused} /> }} />
-      <Tabs.Screen name="bookings" options={{ title: "Bookings", tabBarIcon: ({ focused }) => <TabIcon name="key" focused={focused} /> }} />
-      <Tabs.Screen name="profile" options={{ title: "Profile", tabBarIcon: ({ focused }) => <TabIcon name="person" focused={focused} /> }} />
+      <Tabs.Screen name="index" options={{ title: t("tabs.find"), tabBarIcon: ({ focused }) => <TabIcon name="search" focused={focused} /> }} />
+      <Tabs.Screen name="bookings" options={{ title: t("tabs.bookings"), tabBarIcon: ({ focused }) => <TabIcon name="key" focused={focused} /> }} />
+      <Tabs.Screen name="profile" options={{ title: t("tabs.profile"), tabBarIcon: ({ focused }) => <TabIcon name="person" focused={focused} /> }} />
     </Tabs>
   );
 }

@@ -3,6 +3,7 @@ import { Href } from "expo-router";
 import { ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { colors, shadow, spacing, typography } from "../constants/theme";
+import { t } from "../i18n";
 import { goBack } from "../utils/navigation";
 
 type Props = {
@@ -19,7 +20,7 @@ export function Header({ title, subtitle, eyebrow, eyebrowColor = colors.accentD
   return (
     <View style={styles.row}>
       <View style={styles.left}>
-        {back ? <IconButton icon="arrow-back" label="Go back" onPress={() => goBack(backTo)} /> : null}
+        {back ? <IconButton icon="arrow-back" label={t("common.back")} onPress={() => goBack(backTo)} /> : null}
         <View style={styles.texts}>
           {eyebrow ? <Text style={[styles.eyebrow, { color: eyebrowColor }]}>{eyebrow}</Text> : null}
           <Text style={styles.title} numberOfLines={2}>

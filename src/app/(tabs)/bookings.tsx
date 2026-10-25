@@ -13,6 +13,8 @@ import { notify } from "../../components/Toast";
 import { colors, radius, spacing, typography } from "../../constants/theme";
 import { useAsync } from "../../hooks/useAsync";
 import { useRefreshOnFocus } from "../../hooks/useRefreshOnFocus";
+import { t, useT } from "../../i18n";
+import { translateError } from "../../i18n/errors";
 import { getCommand, myBookings, sendDoorCommand } from "../../services/garages";
 import { cancelBooking } from "../../services/payments";
 import { Booking, DoorAction } from "../../types/garage";
@@ -23,6 +25,7 @@ const GIVE_UP_MS = 30000; // the server already fails a command after 20 s; this
 
 // Screen 3: the active booking with the Open button, then upcoming and past bookings
 export default function Bookings() {
+  useT(); // re-render in a new language
   const { data, loading, refreshing, error, reload, refresh } = useAsync(myBookings);
   const [now, setNow] = useState(() => new Date());
 
@@ -45,7 +48,7 @@ export default function Bookings() {
 
   return (
     <ScreenWrapper scroll refreshing={refreshing} onRefresh={refresh} style={styles.page}>
-      <Header title="My bookings" subtitle={active.length ? "Your garage is ready" : "Book a garage, then open it here"} />
+      <Header title={t("bookings.title")} subtitle={active.length ? t("bookings.ready") : t("bookings.subtitle")} />
       {loading ? (
         <Loading />
       ) : error ? (
@@ -53,9 +56,9 @@ export default function Bookings() {
       ) : !bookings.length ? (
         <EmptyState
           icon="car-outline"
-          title="No bookings yet"
-          body="Find a garage, pick a time and confirm. Your booking and the Open button show up here."
-          actionLabel="Find a garage"
+          title={t("bookings.emptyTitle")}
+          body={t("bookings.emptyBody")}
+          actionLabel={t("bookings.findGarage")}
           onAction={() => router.navigate("/")}
         />
       ) : (
@@ -66,12 +69,12 @@ export default function Bookings() {
 
           {upcoming.length ? (
             <>
-              <SectionTitle>Upcoming</SectionTitle>
+              <SectionTitle>{t("bookings.upcoming")}</SectionTitle>
               {upcoming.map((b) => (
                 <BookingRow
                   key={b.id}
                   booking={b}
-                  note={new Date(b.starts_at) > now ? `Starts in ${formatDuration(new Date(b.starts_at).getTime() - now.getTime())}` : undefined}
+                  note={new Date(b.starts_at) > now ? t("bookings.startsIn", { time: formatDuration(new Date(b.starts_at).getTime() - now.getTime()) }) : undefined}
                   now={now}
                   onChanged={refresh}
                 />
@@ -81,7 +84,7 @@ export default function Bookings() {
 
           {past.length ? (
             <>
-              <SectionTitle muted>Past</SectionTitle>
+              <SectionTitle muted>{t("bookings.past")}</SectionTitle>
               {past.map((b) => (
                 <BookingRow key={b.id} booking={b} now={now} muted onReviewed={refresh} />
               ))}
@@ -100,6 +103,7 @@ type Door =
   | { phase: "error"; message: string };
 
 function ActiveBooking({ booking, now, onReviewed }: { booking: Booking; now: Date; onReviewed: () => void }) {
+  useT();
   const g = booking.garage;
   const [door, setDoor] = useState<Door>({ phase: "idle" });
   // Whether the last command that went through opened the door, so the button offers the other one
@@ -126,12 +130,12 @@ function ActiveBooking({ booking, now, onReviewed }: { booking: Booking; now: Da
           const at = c.acked_at ? new Date(c.acked_at) : new Date();
           setDoor({ phase: "done", action, at });
           setIsOpen(action === "open");
-          notify(`${DONE_LABEL[action]} ${formatTime(at)}`);
+          notify(doneLabel(action, at));
           return;
         }
-        if (c.status === "error") throw new Error(c.error ?? `The door couldn't be ${DONE_LABEL[action].toLowerCase()}`);
+        if (c.status === "error") throw new Error(c.error ? translateError(c.error) : t("door.failed"));
       }
-      if (alive.current) throw new Error("The door didn't respond. Try again.");
+      if (alive.current) throw new Error(t("door.noResponse"));
     } catch (e: any) {
       if (!alive.current) return;
       setDoor({ phase: "error", message: e.message });
@@ -150,20 +154,20 @@ function ActiveBooking({ booking, now, onReviewed }: { booking: Booking; now: Da
     : door.phase === "error" ? "error"
     : isOpen ? "open" : "closed";
   const caption =
-    door.phase === "busy" ? "Talking to the door…"
-    : door.phase === "done" ? `${DONE_LABEL[door.action]} ${formatTime(door.at)}`
+    door.phase === "busy" ? t("door.talking")
+    : door.phase === "done" ? doneLabel(door.action, door.at)
     : door.phase === "error" ? door.message
-    : "Stand by the door, then tap Open.";
+    : t("door.standBy");
 
   return (
     <Card style={styles.active}>
       <View style={styles.activeHead}>
         <Text style={styles.activeTitle} numberOfLines={2}>
-          {g?.title ?? "Garage"}
+          {g?.title ?? t("bookings.garage")}
         </Text>
         <View style={styles.leftBox}>
           <Text style={styles.leftFigure}>{formatDuration(left)}</Text>
-          <Text style={styles.caption}>left, until {formatTime(new Date(booking.ends_at))}</Text>
+          <Text style={styles.caption}>{t("bookings.leftUntil", { time: formatTime(new Date(booking.ends_at)) })}</Text>
         </View>
       </View>
 
@@ -171,55 +175,57 @@ function ActiveBooking({ booking, now, onReviewed }: { booking: Booking; now: Da
         <>
           <DoorPanel visual={visual} restingOpen={isOpen} caption={caption} />
           <Button
-            title={door.phase === "busy" ? BUSY_LABEL[door.action] : door.phase === "error" ? "Try again" : next === "open" ? "Open" : "Close"}
+            title={door.phase === "busy" ? busyLabel(door.action) : door.phase === "error" ? t("common.tryAgain") : next === "open" ? t("door.open") : t("door.close")}
             icon={next === "open" ? "lock-open" : "lock-closed"}
             // Yellow always means "open the door"; closing is the quiet light button
             variant={next === "open" ? "accent" : "primary"}
             loading={door.phase === "busy"}
             onPress={() => send(next)}
             style={styles.openBtn}
-            accessibilityLabel={`${next === "open" ? "Open" : "Close"} the garage door`}
+            accessibilityLabel={next === "open" ? t("door.openLabel") : t("door.closeLabel")}
           />
         </>
       ) : (
         <View style={styles.manual}>
           <IconTile icon="key" size={40} bg={colors.surface} />
-          <Text style={[styles.body, { flex: 1 }]}>The host lets you in for this garage. It doesn&apos;t open from the app.</Text>
+          <Text style={[styles.body, { flex: 1 }]}>{t("bookings.manual")}</Text>
         </View>
       )}
 
       <Text style={styles.paidLine}>
-        Paid {formatCents(amountOf(booking))} with {paidWith(booking)}
+        {t("bookings.paidWith", { amount: formatCents(amountOf(booking)), method: paidWith(booking) })}
       </Text>
       <ReviewBox booking={booking} onSaved={onReviewed} />
     </Card>
   );
 }
 
-const BUSY_LABEL: Record<DoorAction, string> = { open: "Opening…", close: "Closing…" };
-const DONE_LABEL: Record<DoorAction, string> = { open: "Opened", close: "Closed" };
+// Same verb through the flow: Open -> Opening… -> Opened 02:37
+const busyLabel = (a: DoorAction) => (a === "open" ? t("door.opening") : t("door.closing"));
+const doneLabel = (a: DoorAction, at: Date) => t(a === "open" ? "door.openedAt" : "door.closedAt", { time: formatTime(at) });
 
 const amountOf = (b: Booking) => b.amount_cents ?? Math.round(b.total_price * 100);
 
 const paidWith = (b: Booking) =>
   b.payment?.method === "wallet"
-    ? "Demo wallet"
+    ? t("pay.demoWallet")
     : b.payment?.card_last4
-      ? `${b.payment.card_brand ?? "Card"} •••• ${b.payment.card_last4}`
-      : "Card";
+      ? `${b.payment.card_brand ?? t("pay.card")} •••• ${b.payment.card_last4}`
+      : t("pay.card");
 
 // Status chip for a booking row: Paid / Refunded / Cancelled / Expired / Not paid
 function statusTag(b: Booking): { label: string; bg: string; color: string } {
-  if (b.status === "paid") return { label: "Paid", bg: colors.successSoft, color: colors.success };
-  if (b.status === "cancelled" && b.payment?.status === "refunded") return { label: "Refunded", bg: colors.accentSoft, color: colors.accentDeep };
-  if (b.status === "cancelled") return { label: "Cancelled", bg: colors.sand, color: colors.textMuted };
-  if (b.status === "expired") return { label: "Expired", bg: colors.sand, color: colors.textMuted };
-  return { label: "Not paid", bg: colors.errorSoft, color: colors.errorText };
+  if (b.status === "paid") return { label: t("status.paid"), bg: colors.successSoft, color: colors.success };
+  if (b.status === "cancelled" && b.payment?.status === "refunded") return { label: t("status.refunded"), bg: colors.accentSoft, color: colors.accentDeep };
+  if (b.status === "cancelled") return { label: t("status.cancelled"), bg: colors.sand, color: colors.textMuted };
+  if (b.status === "expired") return { label: t("status.expired"), bg: colors.sand, color: colors.textMuted };
+  return { label: t("status.notPaid"), bg: colors.errorSoft, color: colors.errorText };
 }
 
 type RowProps = { booking: Booking; now: Date; note?: string; muted?: boolean; onChanged?: () => void; onReviewed?: () => void };
 
 function BookingRow({ booking, now, note, muted, onChanged, onReviewed }: RowProps) {
+  useT();
   const g = booking.garage;
   const [confirming, setConfirming] = useState(false);
   const [cancelling, setCancelling] = useState(false);
@@ -233,7 +239,7 @@ function BookingRow({ booking, now, note, muted, onChanged, onReviewed }: RowPro
     try {
       setCancelling(true);
       const r = await cancelBooking(booking.id);
-      notify(r.refund ? `Cancelled. Refunded ${formatCents(r.refunded_cents)}` : "Booking cancelled");
+      notify(r.refund ? t("bookings.refunded", { amount: formatCents(r.refunded_cents) }) : t("bookings.cancelled"));
       onChanged?.();
     } catch (e: any) {
       notify(e.message, "error");
@@ -250,8 +256,8 @@ function BookingRow({ booking, now, note, muted, onChanged, onReviewed }: RowPro
   return (
     <View style={styles.ticket}>
       <View style={[styles.times, muted && styles.dim]}>
-        <TicketTime label="In" at={inAt} />
-        <TicketTime label="Out" at={outAt} />
+        <TicketTime label={t("ticket.in")} at={inAt} />
+        <TicketTime label={t("ticket.out")} at={outAt} />
       </View>
 
       <Perforation />
@@ -259,7 +265,7 @@ function BookingRow({ booking, now, note, muted, onChanged, onReviewed }: RowPro
       <View style={[styles.stub, muted && styles.dim]}>
         <View style={{ flex: 1, gap: 2 }}>
           <Text style={styles.rowTitle} numberOfLines={1}>
-            {g?.title ?? "Garage"}
+            {g?.title ?? t("bookings.garage")}
           </Text>
           <View style={styles.tagRow}>
             <Tag label={tag.label} bg={tag.bg} color={tag.color} />
@@ -276,13 +282,13 @@ function BookingRow({ booking, now, note, muted, onChanged, onReviewed }: RowPro
         confirming ? (
           <View style={styles.confirmRow}>
             <Text style={[styles.caption, { flex: 1 }]}>
-              {booking.status === "paid" ? `Cancel and refund ${formatCents(amount)}?` : "Cancel and free this slot?"}
+              {booking.status === "paid" ? t("bookings.confirmRefund", { amount: formatCents(amount) }) : t("bookings.confirmFree")}
             </Text>
-            <Button title="Keep" size="sm" variant="ghost" disabled={cancelling} onPress={() => setConfirming(false)} />
-            <Button title="Cancel booking" size="sm" variant="danger" loading={cancelling} onPress={cancel} />
+            <Button title={t("bookings.keep")} size="sm" variant="ghost" disabled={cancelling} onPress={() => setConfirming(false)} />
+            <Button title={t("bookings.cancel")} size="sm" variant="danger" loading={cancelling} onPress={cancel} />
           </View>
         ) : (
-          <Button title="Cancel booking" size="sm" variant="ghost" icon="close-circle" onPress={() => setConfirming(true)} style={styles.cancelBtn} />
+          <Button title={t("bookings.cancel")} size="sm" variant="ghost" icon="close-circle" onPress={() => setConfirming(true)} style={styles.cancelBtn} />
         )
       ) : null}
 

@@ -14,23 +14,23 @@ import { notify } from "../../components/Toast";
 import { colors, radius, spacing, typography } from "../../constants/theme";
 import { useAuth } from "../../context/AuthContext";
 import { useAsync } from "../../hooks/useAsync";
+import { useT } from "../../i18n";
 import { supabase } from "../../services/supabase";
 import { getProfile, ProfileUpdate, updateProfile } from "../../services/userService";
 
 export default function Profile() {
   const { user, logout } = useAuth();
+  const { t } = useT();
   const { data: profile, loading, error, setData } = useAsync(
     () => (user ? getProfile(user.id) : Promise.resolve(null)),
     [user?.id]
   );
 
   const [fullName, setFullName] = useState("");
-  const [username, setUsername] = useState("");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     setFullName(profile?.full_name ?? user?.user_metadata?.full_name ?? "");
-    setUsername(profile?.username ?? "");
   }, [profile, user]);
 
   // Saves to the profiles table and to the login's metadata
@@ -44,8 +44,9 @@ export default function Profile() {
   const save = async () => {
     try {
       setSaving(true);
-      await persist({ full_name: fullName.trim() || null, username: username.trim() || null });
-      notify("Profile saved");
+      // The username is changed in Settings, where the server checks nobody else has it
+      await persist({ full_name: fullName.trim() || null });
+      notify(t("profile.saved"));
     } catch (e: any) {
       notify(e.message, "error");
     } finally {
@@ -63,14 +64,19 @@ export default function Profile() {
 
   return (
     <ScreenWrapper scroll style={styles.page}>
-      <Header title="Profile" />
+      <Header title={t("profile.title")} />
 
       <View style={styles.hero}>
         <Avatar name={fullName || user?.email} size={72} />
         <View style={{ flex: 1, gap: 4 }}>
           <Text style={styles.name} numberOfLines={1}>
-            {fullName || "No name yet"}
+            {fullName || t("profile.noName")}
           </Text>
+          {profile?.username ? (
+            <Text style={styles.handle} numberOfLines={1}>
+              @{profile.username}
+            </Text>
+          ) : null}
           <Text style={styles.caption} numberOfLines={1}>
             {user?.email}
           </Text>
@@ -78,36 +84,29 @@ export default function Profile() {
       </View>
 
       <Card style={styles.list}>
-        <SettingRow icon="home" label="Your garages" hint="List a garage and pair its door" onPress={() => router.push("/host")} />
-        <SettingRow icon="key" label="My bookings" onPress={() => router.navigate("/bookings")} divider />
+        <SettingRow icon="settings" label={t("profile.settings")} hint={t("profile.settingsHint")} onPress={() => router.push("/settings")} />
+        <SettingRow icon="home" label={t("profile.garages")} hint={t("profile.garagesHint")} onPress={() => router.push("/host")} divider />
+        <SettingRow icon="key" label={t("profile.bookings")} onPress={() => router.navigate("/bookings")} divider />
       </Card>
 
       {loading ? (
         <Loading />
       ) : (
         <>
-          <SectionTitle>Your details</SectionTitle>
+          <SectionTitle>{t("profile.details")}</SectionTitle>
           <Card style={styles.details}>
             {error ? (
               <Text style={styles.warning}>
-                Couldn&apos;t load your profile: {error}. Check that the profiles table exists and you have a row in it.
+                {t("profile.loadError", { error })}
               </Text>
             ) : null}
-            <Input label="Full name" placeholder="Maria Ivanova" value={fullName} onChangeText={setFullName} />
-            <Input
-              label="Username"
-              placeholder="maria"
-              autoCapitalize="none"
-              autoCorrect={false}
-              value={username}
-              onChangeText={setUsername}
-            />
-            <Button title="Save profile" loading={saving} onPress={save} />
+            <Input label={t("profile.fullName")} placeholder={t("profile.fullNamePlaceholder")} value={fullName} onChangeText={setFullName} />
+            <Button title={t("profile.save")} loading={saving} onPress={save} />
           </Card>
         </>
       )}
 
-      <Button title="Log out" icon="log-out-outline" variant="danger" onPress={onLogout} style={{ marginTop: spacing.xl }} />
+      <Button title={t("profile.logout")} icon="log-out-outline" variant="danger" onPress={onLogout} style={{ marginTop: spacing.xl }} />
     </ScreenWrapper>
   );
 }
@@ -151,6 +150,7 @@ const styles = StyleSheet.create({
   },
   name: { ...typography.h2, color: colors.ink },
   caption: { ...typography.caption, color: colors.textMuted },
+  handle: { ...typography.label, color: colors.accentDeep },
   list: { marginTop: spacing.lg, paddingVertical: spacing.xs },
   setting: { flexDirection: "row", alignItems: "center", gap: spacing.md, minHeight: 56, paddingVertical: spacing.sm },
   divider: { borderTopWidth: 1, borderTopColor: colors.border },

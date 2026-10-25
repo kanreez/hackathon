@@ -1,6 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { SIZE_META } from "../constants/garages";
+import { areaLabel, SIZE_META } from "../constants/garages";
 import { colors, spacing, typography } from "../constants/theme";
+import { t, useT } from "../i18n";
 import { Garage } from "../types/garage";
 import { formatMoney } from "../utils/booking";
 import { openDirections } from "../utils/maps";
@@ -14,7 +15,7 @@ type Props = {
 };
 
 export function formatKm(km: number) {
-  return km < 1 ? `${Math.round(km * 1000)} m` : `${km.toFixed(1)} km`;
+  return km < 1 ? t("units.m", { n: Math.round(km * 1000) }) : t("units.km", { n: km.toFixed(1) });
 }
 
 // One garage in a list: a flat row between hairlines. Garages that open from the phone get a
@@ -22,9 +23,10 @@ export function formatKm(km: number) {
 // The tappable info area and the directions button sit side by side, not one inside the
 // other: on web each becomes a <button>, and a button can't contain another button.
 export function GarageRow({ garage: g, distanceKm, onPress }: Props) {
+  useT(); // re-render in a new language
   const app = g.access === "app";
-  const where = distanceKm != null ? `${g.area}, ${formatKm(distanceKm)}` : g.area;
-  const spec = `${SIZE_META[g.size].label}, ${g.covered ? "covered" : "open-air"}`;
+  const where = distanceKm != null ? `${areaLabel(g.area)}, ${formatKm(distanceKm)}` : areaLabel(g.area);
+  const spec = `${SIZE_META[g.size].label}, ${(g.covered ? t("garage.covered") : t("garage.openAir")).toLowerCase()}`;
   const info = (
     <>
       <View style={styles.body}>
@@ -38,12 +40,12 @@ export function GarageRow({ garage: g, distanceKm, onPress }: Props) {
           {spec}
         </Text>
         <RatingLine rating={g.rating} />
-        {app ? <Text style={styles.app}>Opens from your phone</Text> : null}
+        {app ? <Text style={styles.app}>{t("garage.opensFromPhone")}</Text> : null}
       </View>
       <View style={styles.prices}>
         <Text style={styles.price}>{formatMoney(g.price_hour)}</Text>
-        <Text style={styles.caption}>per hour</Text>
-        <Text style={[styles.caption, styles.tabular]}>{formatMoney(g.price_day)} a day</Text>
+        <Text style={styles.caption}>{t("garage.perHour")}</Text>
+        <Text style={[styles.caption, styles.tabular]}>{t("garage.aDay", { price: formatMoney(g.price_day) })}</Text>
       </View>
     </>
   );
@@ -53,7 +55,7 @@ export function GarageRow({ garage: g, distanceKm, onPress }: Props) {
       {onPress ? (
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={`${g.title}, ${formatMoney(g.price_hour)} per hour${app ? ", opens from your phone" : ""}`}
+          accessibilityLabel={`${g.title}, ${formatMoney(g.price_hour)} ${t("garage.perHour")}${app ? `, ${t("garage.opensFromPhone")}` : ""}`}
           onPress={onPress}
           style={({ pressed }) => [styles.info, pressed && { opacity: 0.75 }]}
         >
@@ -62,7 +64,7 @@ export function GarageRow({ garage: g, distanceKm, onPress }: Props) {
       ) : (
         <View style={styles.info}>{info}</View>
       )}
-      <RowAction icon="navigate" label={`Directions to ${g.title}`} onPress={() => openDirections(g)} />
+      <RowAction icon="navigate" label={t("garage.directionsTo", { title: g.title })} onPress={() => openDirections(g)} />
     </View>
   );
 }

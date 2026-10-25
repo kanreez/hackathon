@@ -1,4 +1,5 @@
 import { Linking } from "react-native";
+import { t } from "../i18n";
 import { notify } from "../components/Toast";
 import { Garage } from "../types/garage";
 
@@ -22,6 +23,6 @@ export async function openDirections(g: Place) {
   try {
     await Linking.openURL(directionsUrl(g));
   } catch {
-    notify("Couldn't open Google Maps", "error");
+    notify(t("err.maps"), "error");
   }
 }

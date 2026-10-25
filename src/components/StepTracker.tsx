@@ -2,16 +2,17 @@ import { Ionicons } from "@expo/vector-icons";
 import { Fragment } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { colors, spacing, typography } from "../constants/theme";
-
-const STEPS = ["Find", "Book", "Open"];
+import { useT } from "../i18n";
 
 // The renter flow at a glance: 1 Find → 2 Book → 3 Open
-export function StepTracker({ active, steps = STEPS }: { active: number; steps?: string[] }) {
+export function StepTracker({ active, steps: custom }: { active: number; steps?: string[] }) {
+  const { t } = useT();
+  const steps = custom ?? [t("steps.find"), t("steps.book"), t("steps.open")];
   return (
     <View
       style={styles.row}
       accessibilityRole="progressbar"
-      accessibilityLabel={`Step ${active + 1} of ${steps.length}: ${steps[active]}`}
+      accessibilityLabel={t("steps.label", { n: active + 1, total: steps.length, step: steps[active] })}
     >
       {steps.map((label, i) => {
         const done = i < active;

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { colors, radius, spacing, typography } from "../../constants/theme";
 import { useIsWide } from "../../hooks/useIsWide";
+import { useT } from "../../i18n";
 import { Coords, getCurrentLocation } from "../../utils/location";
 import { Button } from "../Button";
 import { notify } from "../Toast";
@@ -15,6 +16,7 @@ type Props = {
 
 // Host side: tap the map to drop the garage's pin, drag it to fine-tune, or use the phone's GPS
 export function LocationPicker({ value, onChange, fallbackCenter }: Props) {
+  const { t } = useT();
   const wide = useIsWide();
   // The map only moves on purpose (a new area, "Use my location"), never after a tap or drag,
   // so it doesn't follow `value`. An existing garage opens on its own pin.
@@ -42,18 +44,18 @@ export function LocationPicker({ value, onChange, fallbackCenter }: Props) {
         <AppMap center={center} zoom={16} picked={value} onPick={onChange} style={{ height: wide ? 320 : 240 }} />
         {!value ? (
           <View style={styles.hint} pointerEvents="none">
-            <Text style={styles.hintText}>Tap the map where the garage is</Text>
+            <Text style={styles.hintText}>{t("map.tapHint")}</Text>
           </View>
         ) : null}
       </View>
       <View style={styles.row}>
-        <Button title="Use my location" icon="locate" size="sm" variant="secondary" loading={locating} onPress={locate} />
-        {value ? <Button title="Remove pin" size="sm" variant="ghost" onPress={() => onChange(null)} /> : null}
+        <Button title={t("map.useLocation")} icon="locate" size="sm" variant="secondary" loading={locating} onPress={locate} />
+        {value ? <Button title={t("map.removePin")} size="sm" variant="ghost" onPress={() => onChange(null)} /> : null}
       </View>
       <Text style={styles.caption}>
         {value
-          ? `Pin at ${value.latitude.toFixed(5)}, ${value.longitude.toFixed(5)}. Drag it to move it, or tap somewhere else.`
-          : "Renters see the garage at this spot and get directions to it."}
+          ? t("map.pinAt", { lat: value.latitude.toFixed(5), lng: value.longitude.toFixed(5) })
+          : t("map.pinHint")}
       </Text>
     </View>
   );

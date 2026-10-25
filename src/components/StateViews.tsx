@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { ComponentProps } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { colors, spacing, typography } from "../constants/theme";
+import { useT } from "../i18n";
 import { Button } from "./Button";
 
 type IconName = ComponentProps<typeof Ionicons>["name"];
@@ -40,14 +41,15 @@ export function EmptyState({ icon = "sparkles-outline", title, body, actionLabel
 type ErrorProps = { message: string; onRetry?: () => void };
 
 export function ErrorState({ message, onRetry }: ErrorProps) {
+  const { t } = useT();
   return (
     <View style={styles.box}>
       <View style={[styles.iconWrap, { backgroundColor: colors.errorSoft }]}>
         <Ionicons name="alert-circle-outline" size={26} color={colors.errorText} />
       </View>
-      <Text style={styles.title}>Couldn't load this</Text>
+      <Text style={styles.title}>{t("common.loadFailed")}</Text>
       <Text style={styles.body}>{message}</Text>
-      {onRetry ? <Button title="Try again" variant="secondary" size="sm" onPress={onRetry} /> : null}
+      {onRetry ? <Button title={t("common.tryAgain")} variant="secondary" size="sm" onPress={onRetry} /> : null}
     </View>
   );
 }

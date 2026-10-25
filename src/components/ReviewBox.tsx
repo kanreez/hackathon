@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { colors, spacing, typography } from "../constants/theme";
+import { useT } from "../i18n";
 import { saveReview } from "../services/garages";
 import { Booking } from "../types/garage";
 import { Button } from "./Button";
@@ -16,6 +17,7 @@ export const canReview = (b: Booking, now: Date) => b.status === "paid" && new D
 // Rate a stay from My bookings: a quiet button, then stars and an optional comment.
 // Saving again edits the same review.
 export function ReviewBox({ booking, onSaved }: { booking: Booking; onSaved?: () => void }) {
+  const { t } = useT();
   const existing = booking.review;
   const [editing, setEditing] = useState(false);
   const [rating, setRating] = useState(existing?.rating ?? 0);
@@ -26,7 +28,7 @@ export function ReviewBox({ booking, onSaved }: { booking: Booking; onSaved?: ()
     try {
       setSaving(true);
       await saveReview(booking.id, rating, comment.trim());
-      notify(existing ? "Review updated" : "Thanks for the review");
+      notify(existing ? t("review.updated") : t("review.thanks"));
       setEditing(false);
       onSaved?.();
     } catch (e: any) {
@@ -39,40 +41,40 @@ export function ReviewBox({ booking, onSaved }: { booking: Booking; onSaved?: ()
   if (!editing) {
     if (!existing) {
       return (
-        <Button title="Rate this garage" icon="star-outline" size="sm" variant="secondary" onPress={() => setEditing(true)} style={styles.start} />
+        <Button title={t("review.rate")} icon="star-outline" size="sm" variant="secondary" onPress={() => setEditing(true)} style={styles.start} />
       );
     }
     return (
       <View style={styles.mine}>
         <View style={{ flex: 1, gap: 4 }}>
           <View style={styles.mineHead}>
-            <Text style={styles.label}>Your review</Text>
+            <Text style={styles.label}>{t("review.yours")}</Text>
             <Stars value={existing.rating} size={13} />
           </View>
           {existing.comment ? <Text style={styles.comment}>{existing.comment}</Text> : null}
         </View>
-        <Button title="Edit" size="sm" variant="ghost" onPress={() => setEditing(true)} />
+        <Button title={t("common.edit")} size="sm" variant="ghost" onPress={() => setEditing(true)} />
       </View>
     );
   }
 
   return (
     <View style={styles.form}>
-      <Text style={styles.label}>How was it?</Text>
+      <Text style={styles.label}>{t("review.howWasIt")}</Text>
       <StarPicker value={rating} onChange={setRating} />
       <Input
         value={comment}
         onChangeText={setComment}
-        placeholder="Anything other renters should know? (optional)"
+        placeholder={t("review.placeholder")}
         multiline
         maxLength={MAX_COMMENT}
-        accessibilityLabel="Comment"
+        accessibilityLabel={t("review.comment")}
         style={{ minHeight: 80 }}
       />
       <View style={styles.actions}>
-        <Button title="Cancel" size="sm" variant="ghost" disabled={saving} onPress={() => setEditing(false)} />
+        <Button title={t("common.cancel")} size="sm" variant="ghost" disabled={saving} onPress={() => setEditing(false)} />
         <Button
-          title={existing ? "Save changes" : "Post review"}
+          title={existing ? t("review.saveChanges") : t("review.post")}
           size="sm"
           variant="primary"
           loading={saving}
@@ -80,7 +82,7 @@ export function ReviewBox({ booking, onSaved }: { booking: Booking; onSaved?: ()
           onPress={save}
         />
       </View>
-      {!rating ? <Text style={styles.hint}>Pick a number of stars first.</Text> : null}
+      {!rating ? <Text style={styles.hint}>{t("review.pickFirst")}</Text> : null}
     </View>
   );
 }

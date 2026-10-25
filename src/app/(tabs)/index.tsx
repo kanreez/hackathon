@@ -16,10 +16,11 @@ import { ScreenWrapper } from "../../components/ScreenWrapper";
 import { EmptyState, ErrorState, Loading } from "../../components/StateViews";
 import { StepTracker } from "../../components/StepTracker";
 import { notify } from "../../components/Toast";
-import { AREA_CENTERS, EXAMPLE_QUERIES, SIZE_META } from "../../constants/garages";
+import { AREA_CENTERS, areaLabel, exampleQueries, SIZE_META } from "../../constants/garages";
 import { colors, radius, spacing, typography } from "../../constants/theme";
 import { useAsync } from "../../hooks/useAsync";
 import { useIsWide } from "../../hooks/useIsWide";
+import { useT } from "../../i18n";
 import { listGarages, searchGarages } from "../../services/garages";
 import { Garage, SearchResult } from "../../types/garage";
 import { formatMoney, formatRange } from "../../utils/booking";
@@ -27,6 +28,7 @@ import { Coords, distanceKm, getCurrentLocation } from "../../utils/location";
 
 // Screen 1: ask in plain language, see matching garages nearby
 export default function Find() {
+  const { t } = useT();
   const [query, setQuery] = useState("");
   const [searching, setSearching] = useState(false);
   const [result, setResult] = useState<SearchResult | null>(null);
@@ -52,7 +54,7 @@ export default function Find() {
       // Not a garage search: keep the normal list and suggest something that is
       if (r.off_topic) {
         setResult(null);
-        setHint(r.hint ?? 'Try asking "garages near me!"');
+        setHint(t("find.offTopic")); // the same fixed hint the server sends, in the app's language
       } else {
         setHint(null);
         setResult(r);
@@ -85,7 +87,7 @@ export default function Find() {
   // Map view: the same garages as the list, as price pins
   const pins: MapPin[] = shown.flatMap(({ garage: g }) =>
     g.latitude != null && g.longitude != null
-      ? [{ id: g.id, latitude: g.latitude, longitude: g.longitude, label: `${formatMoney(g.price_hour)}/h` }]
+      ? [{ id: g.id, latitude: g.latitude, longitude: g.longitude, label: t("find.pinPrice", { price: formatMoney(g.price_hour) }) }]
       : []
   );
   const selected = shown.find((s) => s.garage.id === selectedId) ?? null;
@@ -105,27 +107,27 @@ export default function Find() {
       {wide ? null : (
         <View style={styles.topRow}>
           <BrandMark />
-          <IconButton icon="time-outline" label="My bookings" onPress={() => router.navigate("/bookings")} />
+          <IconButton icon="time-outline" label={t("profile.bookings")} onPress={() => router.navigate("/bookings")} />
         </View>
       )}
-      <Headline title="Need a garage nearby?" subline="Say what you need. We find one that fits, and you open it from your phone." />
+      <Headline title={t("find.headline")} subline={t("find.subline")} />
 
       <Card style={styles.ask}>
         <Input
           value={query}
           onChangeText={setQuery}
-          placeholder="garage near Pirogov tomorrow 9 to 13, fits a Golf"
+          placeholder={t("examples.1")}
           multiline
           maxLength={300}
-          accessibilityLabel="Describe the garage you need"
+          accessibilityLabel={t("find.askLabel")}
           style={{ minHeight: 84 }}
         />
         <View style={styles.examples}>
-          {EXAMPLE_QUERIES.map((q) => (
+          {exampleQueries().map((q) => (
             <Pressable
               key={q}
               accessibilityRole="button"
-              accessibilityLabel={`Try: ${q}`}
+              accessibilityLabel={t("find.tryExample", { q })}
               onPress={() => search(q)}
               style={({ pressed }) => [styles.example, pressed && { transform: [{ scale: 0.96 }] }]}
             >
@@ -136,7 +138,7 @@ export default function Find() {
           ))}
         </View>
         <Button
-          title="Find garages"
+          title={t("find.submit")}
           icon="search"
           variant="accent"
           loading={searching}
@@ -149,7 +151,7 @@ export default function Find() {
         <View style={styles.hint} accessibilityLiveRegion="polite">
           <Ionicons name="information-circle-outline" size={20} color={colors.textMuted} />
           <Text style={styles.hintText}>{hint}</Text>
-          <Button title="Try it" size="sm" variant="ghost" loading={searching} onPress={() => search("garages near me")} />
+          <Button title={t("find.tryIt")} size="sm" variant="ghost" loading={searching} onPress={() => search(t("find.nearMe"))} />
         </View>
       ) : null}
       {result ? <Understood result={result} onClear={() => setResult(null)} /> : null}
@@ -159,11 +161,11 @@ export default function Find() {
   const results = (
     <>
       <View style={styles.resultsHead}>
-        <SectionTitle>{result ? (result.garages.length ? "Matches" : "No exact match") : "Garages near you"}</SectionTitle>
+        <SectionTitle>{result ? (result.garages.length ? t("find.matches") : t("find.noMatch")) : t("find.nearYou")}</SectionTitle>
         {shown.length ? (
           <View style={styles.viewToggle}>
-            <Chip label="List" icon="list" selected={view === "list"} onPress={() => setView("list")} />
-            <Chip label="Map" icon="map" selected={view === "map"} onPress={() => setView("map")} />
+            <Chip label={t("find.list")} icon="list" selected={view === "list"} onPress={() => setView("list")} />
+            <Chip label={t("find.map")} icon="map" selected={view === "map"} onPress={() => setView("map")} />
           </View>
         ) : null}
       </View>
@@ -183,11 +185,11 @@ export default function Find() {
               <GarageRow garage={selected.garage} distanceKm={selected.km} onPress={() => open(selected.garage)} />
             </View>
           ) : (
-            <Text style={styles.mapHint}>Tap a price on the map to see that garage.</Text>
+            <Text style={styles.mapHint}>{t("find.mapHint")}</Text>
           )}
           {shown.length > pins.length ? (
             <Text style={styles.mapHint}>
-              {shown.length - pins.length} more without a map location. Switch to List to see them.
+              {t("find.unmapped", { n: shown.length - pins.length })}
             </Text>
           ) : null}
         </>
@@ -196,14 +198,14 @@ export default function Find() {
       ) : all.error && !result ? (
         <ErrorState message={all.error} onRetry={all.reload} />
       ) : !shown.length && !result ? (
-        <EmptyState icon="car-outline" title="No garages yet" body="When hosts list garages they show up here." />
+        <EmptyState icon="car-outline" title={t("find.emptyTitle")} body={t("find.emptyBody")} />
       ) : (
         shown.map(({ garage, km }) => <GarageRow key={garage.id} garage={garage} distanceKm={km} onPress={() => open(garage)} />)
       )}
 
       {view === "list" && result && others.length ? (
         <>
-          <SectionTitle muted>{result.garages.length ? "Other garages" : "Closest alternatives"}</SectionTitle>
+          <SectionTitle muted>{result.garages.length ? t("find.others") : t("find.alternatives")}</SectionTitle>
           {others.map(({ garage, km }) => (
             <GarageRow key={garage.id} garage={garage} distanceKm={km} onPress={() => open(garage)} />
           ))}
@@ -248,20 +250,21 @@ function Plate({ label }: { label: string }) {
 
 // Shows what the AI took from the request, so the renter can trust (or fix) the search
 function Understood({ result, onClear }: { result: SearchResult; onClear: () => void }) {
+  const { t } = useT();
   const f = result.filters;
   const chips = [
-    f.area ? { label: f.area } : null,
+    f.area ? { label: areaLabel(f.area) } : null,
     result.from_utc && result.to_utc ? { label: formatRange(result.from_utc, result.to_utc) } : null,
-    f.vehicle_size ? { label: `Fits ${SIZE_META[f.vehicle_size].fits}` } : null,
-    f.covered === true ? { label: "Covered" } : null,
+    f.vehicle_size ? { label: t("find.fits", { what: SIZE_META[f.vehicle_size].fits }) } : null,
+    f.covered === true ? { label: t("garage.covered") } : null,
   ].filter((c) => c !== null);
 
   return (
     <View style={styles.understood}>
       <View style={styles.understoodHead}>
-        <Text style={styles.eyebrowMuted}>What I understood</Text>
+        <Text style={styles.eyebrowMuted}>{t("find.understood")}</Text>
         <Pressable accessibilityRole="button" onPress={onClear} hitSlop={12}>
-          <Text style={styles.clear}>Clear</Text>
+          <Text style={styles.clear}>{t("find.clear")}</Text>
         </Pressable>
       </View>
       {chips.length ? (
@@ -271,7 +274,7 @@ function Understood({ result, onClear }: { result: SearchResult; onClear: () => 
           ))}
         </View>
       ) : (
-        <Text style={styles.caption}>No filters found. Try naming an area, a time or your car.</Text>
+        <Text style={styles.caption}>{t("find.noFilters")}</Text>
       )}
     </View>
   );

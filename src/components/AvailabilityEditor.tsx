@@ -3,15 +3,12 @@ import { ComponentProps, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { colors, spacing, typography } from "../constants/theme";
 import { AvailabilityWindow } from "../types/garage";
-import { DAY_SHORT, formatHour, WEEK } from "../utils/availability";
+import { useT } from "../i18n";
+import { dayShort, formatHour, WEEK } from "../utils/availability";
 import { Chip, ChipRow } from "./Chip";
 
 type IconName = ComponentProps<typeof Ionicons>["name"];
 
-const MODE_OPTIONS = [
-  { value: "any", label: "Any time" },
-  { value: "set", label: "Set hours" },
-] as const;
 
 // What "Set hours" starts with: the garage is empty while the host is at work
 const WORKDAYS: AvailabilityWindow[] = [1, 2, 3, 4, 5].map((day) => ({ day, start: 8, end: 18 }));
@@ -24,6 +21,11 @@ type Props = {
 
 // Host side: when the garage is empty and can be rented. One time range per day, whole hours.
 export function AvailabilityEditor({ value, onChange, error }: Props) {
+  const { t } = useT();
+  const modeOptions = [
+    { value: "any", label: t("hours.anyTime") },
+    { value: "set", label: t("hours.setHours") },
+  ] as const;
   // Switching to "Any time" and back keeps the hours the host already set
   const [lastSet, setLastSet] = useState<AvailabilityWindow[]>(value ?? WORKDAYS);
 
@@ -43,7 +45,7 @@ export function AvailabilityEditor({ value, onChange, error }: Props) {
 
   return (
     <View style={{ gap: spacing.sm }}>
-      <ChipRow options={MODE_OPTIONS} value={value ? "set" : "any"} onChange={(m) => onChange(m === "any" ? null : lastSet)} />
+      <ChipRow options={modeOptions} value={value ? "set" : "any"} onChange={(m) => onChange(m === "any" ? null : lastSet)} />
       {value ? (
         <View style={styles.days}>
           {WEEK.map((day) => {
@@ -51,22 +53,22 @@ export function AvailabilityEditor({ value, onChange, error }: Props) {
             return (
               <View key={day} style={styles.day}>
                 <View style={styles.dayChip}>
-                  <Chip label={DAY_SHORT[day]} selected={!!w} onPress={() => toggle(day)} />
+                  <Chip label={dayShort(day)} selected={!!w} onPress={() => toggle(day)} />
                 </View>
                 {w ? (
                   <View style={styles.hours}>
                     <HourStep
-                      label={`${DAY_SHORT[day]} from`}
+                      label={t("hours.from", { day: dayShort(day) })}
                       value={w.start}
                       onChange={(start) => change(day, { start })}
                       min={0}
                       max={w.end - 1}
                     />
                     <Text style={styles.dash}>–</Text>
-                    <HourStep label={`${DAY_SHORT[day]} until`} value={w.end} onChange={(end) => change(day, { end })} min={w.start + 1} max={24} />
+                    <HourStep label={t("hours.until", { day: dayShort(day) })} value={w.end} onChange={(end) => change(day, { end })} min={w.start + 1} max={24} />
                   </View>
                 ) : (
-                  <Text style={styles.off}>Not free</Text>
+                  <Text style={styles.off}>{t("hours.notFree")}</Text>
                 )}
               </View>
             );
@@ -76,19 +78,20 @@ export function AvailabilityEditor({ value, onChange, error }: Props) {
       {error ? <Text style={styles.error}>{error}</Text> : null}
       <Text style={styles.caption}>
         {value
-          ? "Tap a day to turn it on or off. Renters can only book inside these hours (Sofia time)."
-          : "Renters can book any hour that isn't already booked."}
+          ? t("hours.setHint")
+          : t("hours.anyHint")}
       </Text>
     </View>
   );
 }
 
 function HourStep({ label, value, onChange, min, max }: { label: string; value: number; onChange: (h: number) => void; min: number; max: number }) {
+  const { t } = useT();
   return (
     <View style={styles.step} accessibilityLabel={`${label} ${formatHour(value)}`}>
-      <StepButton icon="remove" label={`Earlier ${label}`} disabled={value <= min} onPress={() => onChange(value - 1)} />
+      <StepButton icon="remove" label={t("hours.earlier", { what: label })} disabled={value <= min} onPress={() => onChange(value - 1)} />
       <Text style={styles.hour}>{formatHour(value)}</Text>
-      <StepButton icon="add" label={`Later ${label}`} disabled={value >= max} onPress={() => onChange(value + 1)} />
+      <StepButton icon="add" label={t("hours.later", { what: label })} disabled={value >= max} onPress={() => onChange(value + 1)} />
     </View>
   );
 }

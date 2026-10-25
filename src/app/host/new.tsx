@@ -11,21 +11,23 @@ import { LocationPicker } from "../../components/map/LocationPicker";
 import { ScreenWrapper } from "../../components/ScreenWrapper";
 import { ErrorState, Loading } from "../../components/StateViews";
 import { notify } from "../../components/Toast";
-import { ACCESS_META, AREA_CENTERS, AREAS, SIZE_META } from "../../constants/garages";
+import { ACCESS_META, AREA_CENTERS, areaLabel, AREAS, SIZE_META } from "../../constants/garages";
 import { colors, spacing, typography } from "../../constants/theme";
 import { useAsync } from "../../hooks/useAsync";
+import { t, useT } from "../../i18n";
 import { createGarage, getGarage, updateGarage } from "../../services/garages";
 import { Access, AvailabilityWindow, Garage, GarageInput, GarageSize } from "../../types/garage";
 import { Coords } from "../../utils/location";
 import { goBack } from "../../utils/navigation";
 
-const AREA_OPTIONS = AREAS.map((a) => ({ value: a, label: a }));
-const SIZE_OPTIONS = (Object.keys(SIZE_META) as GarageSize[]).map((s) => ({ value: s, label: `${SIZE_META[s].label} · ${SIZE_META[s].hint}` }));
-const COVER_OPTIONS = [
-  { value: "covered", label: "Covered" },
-  { value: "open", label: "Open-air" },
-] as const;
-const ACCESS_OPTIONS = (Object.keys(ACCESS_META) as Access[]).map((a) => ({ value: a, label: ACCESS_META[a].label }));
+// Built during render, so the labels follow the app language
+const areaOptions = () => AREAS.map((a) => ({ value: a, label: areaLabel(a) }));
+const sizeOptions = () => (Object.keys(SIZE_META) as GarageSize[]).map((s) => ({ value: s, label: `${SIZE_META[s].label}, ${SIZE_META[s].hint.toLowerCase()}` }));
+const coverOptions = () => [
+  { value: "covered" as const, label: t("garage.covered") },
+  { value: "open" as const, label: t("garage.openAir") },
+];
+const accessOptions = () => (Object.keys(ACCESS_META) as Access[]).map((a) => ({ value: a, label: ACCESS_META[a].label }));
 
 const toNumber = (s: string) => Number(s.replace(",", "."));
 
@@ -35,14 +37,15 @@ const isArea = (a: string): a is Area => (AREAS as readonly string[]).includes(a
 // Host side: list a garage, or edit one with ?id=. No photo upload, only an optional image link.
 export default function GarageFormScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
+  useT();
   const { data, loading, error, reload } = useAsync(() => (id ? getGarage(id) : Promise.resolve(null)), [id]);
 
   if (!id) return <GarageForm />;
   if (loading || error || !data) {
     return (
       <ScreenWrapper>
-        <Header eyebrow="Host" title="Edit garage" back backTo="/host" />
-        {loading ? <Loading /> : <ErrorState message={error ?? "Garage not found"} onRetry={reload} />}
+        <Header eyebrow={t("host.eyebrow")} title={t("host.edit")} back backTo="/host" />
+        {loading ? <Loading /> : <ErrorState message={error ?? t("err.garageNotFound")} onRetry={reload} />}
       </ScreenWrapper>
     );
   }
@@ -50,6 +53,7 @@ export default function GarageFormScreen() {
 }
 
 function GarageForm({ garage }: { garage?: Garage }) {
+  useT();
   const [title, setTitle] = useState(garage?.title ?? "");
   const [area, setArea] = useState<Area>(garage && isArea(garage.area) ? garage.area : AREAS[0]);
   const [address, setAddress] = useState(garage?.address ?? "");
@@ -69,11 +73,11 @@ function GarageForm({ garage }: { garage?: Garage }) {
 
   const validate = () => {
     const next: Record<string, string> = {};
-    if (!title.trim()) next.title = "Give it a short name renters will recognise.";
-    if (!(toNumber(priceHour) > 0)) next.priceHour = "Enter a price, like 3 or 2.50.";
-    if (!(toNumber(priceDay) > 0)) next.priceDay = "Enter a price, like 20.";
-    if (imageUrl.trim() && !/^https?:\/\//.test(imageUrl.trim())) next.imageUrl = "Paste a link starting with https://";
-    if (availability && !availability.length) next.availability = "Turn on at least one day, or choose Any time.";
+    if (!title.trim()) next.title = t("hostForm.errTitle");
+    if (!(toNumber(priceHour) > 0)) next.priceHour = t("hostForm.errPriceHour");
+    if (!(toNumber(priceDay) > 0)) next.priceDay = t("hostForm.errPriceDay");
+    if (imageUrl.trim() && !/^https?:\/\//.test(imageUrl.trim())) next.imageUrl = t("hostForm.errImage");
+    if (availability && !availability.length) next.availability = t("hostForm.errAvailability");
     setErrors(next);
     return !Object.keys(next).length;
   };
@@ -99,10 +103,10 @@ function GarageForm({ garage }: { garage?: Garage }) {
       };
       if (garage) {
         await updateGarage(garage.id, input);
-        notify("Changes saved");
+        notify(t("hostForm.saved"));
       } else {
         await createGarage(input);
-        notify(access === "app" ? "Listed. Now pair the door's device." : "Garage listed");
+        notify(access === "app" ? t("hostForm.listedPair") : t("hostForm.listed"));
       }
       goBack("/host");
     } catch (e: any) {
@@ -114,30 +118,30 @@ function GarageForm({ garage }: { garage?: Garage }) {
 
   return (
     <ScreenWrapper scroll style={styles.page}>
-      <Header eyebrow="Host" title={garage ? "Edit garage" : "List a garage"} back backTo="/host" />
+      <Header eyebrow={t("host.eyebrow")} title={garage ? t("host.edit") : t("host.list")} back backTo="/host" />
 
       <Card style={styles.group}>
-        <Text style={styles.groupTitle}>Where</Text>
-        <Input label="Title" placeholder="Covered garage by Pirogov" value={title} onChangeText={setTitle} error={errors.title} />
-        <Field label="Area">
-          <ChipRow options={AREA_OPTIONS} value={area} onChange={setArea} />
+        <Text style={styles.groupTitle}>{t("hostForm.where")}</Text>
+        <Input label={t("hostForm.title")} placeholder={t("hostForm.titlePlaceholder")} value={title} onChangeText={setTitle} error={errors.title} />
+        <Field label={t("hostForm.area")}>
+          <ChipRow options={areaOptions()} value={area} onChange={setArea} />
         </Field>
-        <Input label="Address" placeholder="ul. Tsar Samuil 110" value={address} onChangeText={setAddress} />
-        <Field label="Location on the map">
+        <Input label={t("hostForm.address")} placeholder={t("hostForm.addressPlaceholder")} value={address} onChangeText={setAddress} />
+        <Field label={t("hostForm.location")}>
           <LocationPicker value={coords} onChange={setCoords} fallbackCenter={AREA_CENTERS[area]} />
         </Field>
       </Card>
 
       <Card style={styles.group}>
-        <Text style={styles.groupTitle}>The garage</Text>
-        <Field label="Size">
-          <ChipRow options={SIZE_OPTIONS} value={size} onChange={setSize} />
+        <Text style={styles.groupTitle}>{t("hostForm.garage")}</Text>
+        <Field label={t("book.size")}>
+          <ChipRow options={sizeOptions()} value={size} onChange={setSize} />
         </Field>
-        <Field label="Type">
-          <ChipRow options={COVER_OPTIONS} value={cover} onChange={setCover} />
+        <Field label={t("book.type")}>
+          <ChipRow options={coverOptions()} value={cover} onChange={setCover} />
         </Field>
         <Input
-          label="Image link (optional)"
+          label={t("hostForm.image")}
           placeholder="https://…"
           autoCapitalize="none"
           keyboardType="url"
@@ -146,8 +150,8 @@ function GarageForm({ garage }: { garage?: Garage }) {
           error={errors.imageUrl}
         />
         <Input
-          label="Description (optional)"
-          placeholder="2.1 m high door, fits a roof box. Charger socket inside."
+          label={t("hostForm.description")}
+          placeholder={t("hostForm.descriptionPlaceholder")}
           multiline
           maxLength={500}
           value={description}
@@ -158,31 +162,31 @@ function GarageForm({ garage }: { garage?: Garage }) {
       </Card>
 
       <Card style={styles.group}>
-        <Text style={styles.groupTitle}>{"When it's free"}</Text>
+        <Text style={styles.groupTitle}>{t("hostForm.whenFree")}</Text>
         <AvailabilityEditor value={availability} onChange={setAvailability} error={errors.availability} />
       </Card>
 
       <Card style={styles.group}>
-        <Text style={styles.groupTitle}>Price and access</Text>
+        <Text style={styles.groupTitle}>{t("hostForm.priceAccess")}</Text>
         <View style={styles.prices}>
           <View style={{ flex: 1 }}>
-            <Input label="€ per hour" placeholder="3" keyboardType="decimal-pad" value={priceHour} onChangeText={setPriceHour} error={errors.priceHour} />
+            <Input label={t("hostForm.perHour")} placeholder="3" keyboardType="decimal-pad" value={priceHour} onChangeText={setPriceHour} error={errors.priceHour} />
           </View>
           <View style={{ flex: 1 }}>
-            <Input label="€ per day" placeholder="20" keyboardType="decimal-pad" value={priceDay} onChangeText={setPriceDay} error={errors.priceDay} />
+            <Input label={t("hostForm.perDay")} placeholder="20" keyboardType="decimal-pad" value={priceDay} onChangeText={setPriceDay} error={errors.priceDay} />
           </View>
         </View>
-        <Field label="How renters get in">
-          <ChipRow options={ACCESS_OPTIONS} value={access} onChange={setAccess} />
+        <Field label={t("hostForm.howIn")}>
+          <ChipRow options={accessOptions()} value={access} onChange={setAccess} />
           <Text style={styles.caption}>
             {access === "app"
-              ? "An ESP32 on your door opens it when a renter with an active booking taps Open. You'll get its device key next."
+              ? t("hostForm.appHint")
               : ACCESS_META.manual.hint}
           </Text>
         </Field>
       </Card>
 
-      <Button title={garage ? "Save changes" : "List garage"} icon="checkmark" variant="accent" loading={saving} onPress={save} style={{ marginTop: spacing.sm }} />
+      <Button title={garage ? t("review.saveChanges") : t("hostForm.submit")} icon="checkmark" variant="accent" loading={saving} onPress={save} style={{ marginTop: spacing.sm }} />
     </ScreenWrapper>
   );
 }

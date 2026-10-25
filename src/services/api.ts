@@ -1,5 +1,6 @@
 import Constants from "expo-constants";
 import { Platform } from "react-native";
+import { translateError } from "../i18n/errors";
 import { supabase } from "./supabase";
 
 // In dev, Expo's hostUri is your PC's address as the phone sees it (e.g. "192.168.1.50:8081"),
@@ -29,7 +30,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body.error ?? `Request failed (${res.status})`);
+    throw new Error(translateError(body.error ?? `Request failed (${res.status})`));
   }
   return res.json() as Promise<T>;
 }

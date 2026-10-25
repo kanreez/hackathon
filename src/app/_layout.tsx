@@ -14,6 +14,7 @@ import { ActivityIndicator, View } from "react-native";
 import { ToastProvider } from "../components/Toast";
 import { colors } from "../constants/theme";
 import { AuthProvider, useAuth } from "../context/AuthContext";
+import { LanguageProvider } from "../i18n";
 
 // Keep the splash screen up until the fonts are ready
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -45,6 +46,7 @@ function RootNavigator() {
       <Stack.Screen name="garage/[id]" />
       <Stack.Screen name="host/index" />
       <Stack.Screen name="host/new" />
+      <Stack.Screen name="settings" />
     </Stack>
   );
 }
@@ -66,11 +68,13 @@ export default function RootLayout() {
   if (!fontsLoaded && !fontError) return null;
 
   return (
-    <AuthProvider>
-      <ToastProvider>
-        <StatusBar style="light" />
-        <RootNavigator />
-      </ToastProvider>
-    </AuthProvider>
+    <LanguageProvider>
+      <AuthProvider>
+        <ToastProvider>
+          <StatusBar style="light" />
+          <RootNavigator />
+        </ToastProvider>
+      </AuthProvider>
+    </LanguageProvider>
   );
 }

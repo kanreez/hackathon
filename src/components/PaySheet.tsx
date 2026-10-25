@@ -3,6 +3,8 @@ import { useEffect, useRef, useState } from "react";
 import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { colors, radius, shadow, spacing, typography } from "../constants/theme";
 import { useIsWide } from "../hooks/useIsWide";
+import { t, useT } from "../i18n";
+import { translateError } from "../i18n/errors";
 import { confirmPayment, newIdempotencyKey } from "../services/payments";
 import { Checkout, PayResult } from "../types/garage";
 import { formatCents } from "../utils/booking";
@@ -38,15 +40,15 @@ const formatLeft = (ms: number) => `${Math.floor(ms / 60000)}:${pad(Math.floor((
 function cardErrors(card: string, expiry: string, cvc: string) {
   const errors: Record<string, string> = {};
   const n = digitsOf(card);
-  if (n.length < 12) errors.card = "Enter the card number.";
+  if (n.length < 12) errors.card = t("pay.errCard");
   const m = /^(\d{2})\/(\d{2})$/.exec(expiry);
-  if (!m || +m[1] < 1 || +m[1] > 12) errors.expiry = "Use MM/YY.";
+  if (!m || +m[1] < 1 || +m[1] > 12) errors.expiry = t("pay.errExpiryFormat");
   else {
     const now = new Date();
     const yy = now.getFullYear() % 100;
-    if (+m[2] < yy || (+m[2] === yy && +m[1] < now.getMonth() + 1)) errors.expiry = "This card has expired.";
+    if (+m[2] < yy || (+m[2] === yy && +m[1] < now.getMonth() + 1)) errors.expiry = t("pay.errExpired");
   }
-  if (!/^\d{3,4}$/.test(cvc)) errors.cvc = "3 or 4 digits.";
+  if (!/^\d{3,4}$/.test(cvc)) errors.cvc = t("pay.errCvc");
   return errors;
 }
 
@@ -54,6 +56,7 @@ function cardErrors(card: string, expiry: string, cvc: string) {
 // "confirm in your bank app" step. The server decides the outcome; this only asks.
 // Render it with key={checkout?.booking_id} so each booking starts with an empty form.
 export function PaySheet({ checkout, title, range, breakdown, onPaid, onClose, onExpired }: Props) {
+  useT(); // re-render in a new language
   const wide = useIsWide();
   const [phase, setPhase] = useState<Phase>("idle");
   const [card, setCard] = useState("");
@@ -70,8 +73,8 @@ export function PaySheet({ checkout, title, range, breakdown, onPaid, onClose, o
 
   useEffect(() => {
     if (!checkout) return;
-    const t = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(t);
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
   }, [checkout]);
 
   useEffect(() => {
@@ -89,13 +92,13 @@ export function PaySheet({ checkout, title, range, breakdown, onPaid, onClose, o
 
   const handle = (result: PayResult) => {
     if (result.status === "succeeded") {
-      setPaidWith(result.method === "wallet" ? "Demo wallet" : `${result.card_brand ?? "Card"} •••• ${result.card_last4 ?? ""}`);
+      setPaidWith(result.method === "wallet" ? t("pay.demoWallet") : `${result.card_brand ?? t("pay.card")} •••• ${result.card_last4 ?? ""}`);
       setPhase("success");
       setTimeout(() => onPaid(result), 900); // let the check mark land
     } else if (result.status === "requires_action") {
       setPhase("action");
     } else {
-      const message = result.message ?? "The payment didn't go through.";
+      const message = result.message ? translateError(result.message) : t("pay.failed");
       setDeclined(message);
       notify(message, "error");
       setPhase("idle");
@@ -131,7 +134,7 @@ export function PaySheet({ checkout, title, range, breakdown, onPaid, onClose, o
 
   const declineAction = () => {
     setPhase("idle");
-    setDeclined("You didn't approve the payment. Try again or use another card.");
+    setDeclined(t("pay.notApproved"));
   };
 
   return (
@@ -149,7 +152,7 @@ export function PaySheet({ checkout, title, range, breakdown, onPaid, onClose, o
                 <Text style={styles.caption}>{range}</Text>
               </View>
               {phase !== "success" ? (
-                <Pressable accessibilityRole="button" accessibilityLabel="Cancel and close" disabled={busy} onPress={onClose} hitSlop={12} style={styles.close}>
+                <Pressable accessibilityRole="button" accessibilityLabel={t("pay.close")} disabled={busy} onPress={onClose} hitSlop={12} style={styles.close}>
                   <Ionicons name="close" size={22} color={colors.ink} />
                 </Pressable>
               ) : null}
@@ -159,7 +162,7 @@ export function PaySheet({ checkout, title, range, breakdown, onPaid, onClose, o
               <View style={{ flex: 1 }}>
                 <Text style={styles.caption}>{breakdown}</Text>
                 <Text style={styles.held} accessibilityLiveRegion="polite">
-                  Slot held for {formatLeft(Math.max(0, left))}
+                  {t("pay.held", { time: formatLeft(Math.max(0, left)) })}
                 </Text>
               </View>
               <Text style={styles.amount}>{amount}</Text>
@@ -168,7 +171,7 @@ export function PaySheet({ checkout, title, range, breakdown, onPaid, onClose, o
             {phase === "success" ? (
               <View style={styles.success} accessibilityLiveRegion="polite">
                 <IconTile icon="checkmark" size={56} bg={colors.successSoft} color={colors.success} />
-                <Text style={styles.successTitle}>Paid {amount}</Text>
+                <Text style={styles.successTitle}>{t("pay.paid", { amount })}</Text>
                 <Text style={styles.caption}>{paidWith}</Text>
               </View>
             ) : phase === "action" ? (
@@ -176,12 +179,12 @@ export function PaySheet({ checkout, title, range, breakdown, onPaid, onClose, o
                 <View style={styles.bankHead}>
                   <IconTile icon="shield-checkmark" size={44} bg={colors.surface} />
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.bankTitle}>Confirm in your bank app</Text>
-                    <Text style={styles.caption}>Your bank asks you to approve {amount} to GarageGo.</Text>
+                    <Text style={styles.bankTitle}>{t("pay.bankTitle")}</Text>
+                    <Text style={styles.caption}>{t("pay.bankBody", { amount })}</Text>
                   </View>
                 </View>
-                <Button title="Approve" icon="checkmark" variant="primary" onPress={approve} />
-                <Button title="Cancel" variant="ghost" onPress={declineAction} />
+                <Button title={t("pay.approve")} icon="checkmark" variant="primary" onPress={approve} />
+                <Button title={t("common.cancel")} variant="ghost" onPress={declineAction} />
               </View>
             ) : (
               <>
@@ -193,22 +196,22 @@ export function PaySheet({ checkout, title, range, breakdown, onPaid, onClose, o
                 ) : null}
 
                 <Input
-                  label="Card number"
+                  label={t("pay.cardNumber")}
                   placeholder="1234 5678 9012 3456"
                   keyboardType="number-pad"
                   autoComplete="cc-number"
                   value={card}
                   onChangeText={(t) => setCard(groupCard(t))}
                   error={errors.card}
-                  hint={`Test card: ${TEST_CARD}`}
+                  hint={t("pay.testCard", { card: TEST_CARD })}
                   editable={!busy}
-                  accessibilityLabel="Card number"
+                  accessibilityLabel={t("pay.cardNumber")}
                 />
                 <View style={styles.pair}>
                   <View style={{ flex: 1 }}>
                     <Input
-                      label="Expiry"
-                      placeholder="MM/YY"
+                      label={t("pay.expiry")}
+                      placeholder={t("pay.expiryPlaceholder")}
                       keyboardType="number-pad"
                       autoComplete="cc-exp"
                       value={expiry}
@@ -235,9 +238,9 @@ export function PaySheet({ checkout, title, range, breakdown, onPaid, onClose, o
                   </View>
                 </View>
 
-                <Button title={busy ? "Processing…" : `Pay ${amount}`} icon="card" variant="accent" loading={busy} onPress={payCard} />
-                <Button title="Pay with demo wallet" icon="wallet" variant="secondary" disabled={busy} onPress={payWallet} />
-                <Text style={styles.note}>Demo checkout: no real money moves. Card details aren&apos;t stored.</Text>
+                <Button title={busy ? t("pay.processing") : t("pay.pay", { amount })} icon="card" variant="accent" loading={busy} onPress={payCard} />
+                <Button title={t("pay.withWallet")} icon="wallet" variant="secondary" disabled={busy} onPress={payWallet} />
+                <Text style={styles.note}>{t("pay.demoNote")}</Text>
               </>
             )}
           </ScrollView>

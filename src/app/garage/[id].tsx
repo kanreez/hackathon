@@ -15,10 +15,11 @@ import { Stars } from "../../components/Stars";
 import { ErrorState, Loading } from "../../components/StateViews";
 import { StepTracker } from "../../components/StepTracker";
 import { notify } from "../../components/Toast";
-import { SIZE_META } from "../../constants/garages";
+import { areaLabel, SIZE_META } from "../../constants/garages";
 import { colors, radius, shadow, spacing, typography } from "../../constants/theme";
 import { useAsync } from "../../hooks/useAsync";
 import { useIsWide } from "../../hooks/useIsWide";
+import { useT } from "../../i18n";
 import { createBooking, getGarage } from "../../services/garages";
 import { cancelBooking } from "../../services/payments";
 import { BookingMode, BusySlot, Checkout, Garage, RatingSummary, Review } from "../../types/garage";
@@ -43,22 +44,19 @@ import { timeAgo } from "../../utils/time";
 
 type IconName = ComponentProps<typeof Ionicons>["name"];
 
-const MODES = [
-  { value: "hour", label: "By the hour" },
-  { value: "day", label: "By the day" },
-] as const;
 
 const DAYS_AHEAD = 14;
 
 // Screen 2: the garage, a time picker, the total, and Confirm. The AI never books: this tap does.
 export default function Book() {
   const { id, from, to } = useLocalSearchParams<{ id: string; from?: string; to?: string }>();
+  const { t } = useT();
   const { data, loading, error, reload } = useAsync(() => getGarage(id), [id]);
 
   if (loading) {
     return (
       <ScreenWrapper>
-        <Header title="Book" back />
+        <Header title={t("book.title")} back />
         <Loading />
       </ScreenWrapper>
     );
@@ -66,8 +64,8 @@ export default function Book() {
   if (error || !data) {
     return (
       <ScreenWrapper>
-        <Header title="Book" back />
-        <ErrorState message={error ?? "Garage not found"} onRetry={reload} />
+        <Header title={t("book.title")} back />
+        <ErrorState message={error ?? t("err.garageNotFound")} onRetry={reload} />
       </ScreenWrapper>
     );
   }
@@ -97,6 +95,11 @@ function initialPick(from?: string, to?: string) {
 }
 
 function BookForm({ garage, busy, reviews, from, to }: { garage: Garage; busy: BusySlot[]; reviews: Review[]; from?: string; to?: string }) {
+  const { t, tn } = useT();
+  const modes = [
+    { value: "hour", label: t("book.byHour") },
+    { value: "day", label: t("book.byDay") },
+  ] as const;
   const [initial] = useState(() => initialPick(from, to));
   const [mode, setMode] = useState<BookingMode>(initial.mode);
   const [day, setDay] = useState(initial.day);
@@ -141,7 +144,7 @@ function BookForm({ garage, busy, reviews, from, to }: { garage: Garage; busy: B
   };
 
   const paid = () => {
-    notify(`Paid and booked: ${formatRange(start, end)}`);
+    notify(t("book.paidAndBooked", { range: formatRange(start, end) }));
     setCheckout(null);
     router.replace("/bookings");
   };
@@ -154,8 +157,8 @@ function BookForm({ garage, busy, reviews, from, to }: { garage: Garage; busy: B
 
   const expired = useCallback(() => {
     setCheckout(null);
-    notify("Reservation expired. Pick the time again.", "error");
-  }, []);
+    notify(t("book.expired"), "error");
+  }, [t]);
 
   const app = garage.access === "app";
   const spot = garage.latitude != null && garage.longitude != null ? { latitude: garage.latitude, longitude: garage.longitude } : null;
@@ -164,11 +167,11 @@ function BookForm({ garage, busy, reviews, from, to }: { garage: Garage; busy: B
     <>
       <View style={styles.hero}>
         <Text style={styles.heroTitle}>{garage.title}</Text>
-        <Text style={styles.heroBody}>{garage.address ? `${garage.address}, ${garage.area}` : garage.area}</Text>
+        <Text style={styles.heroBody}>{garage.address ? `${garage.address}, ${areaLabel(garage.area)}` : areaLabel(garage.area)}</Text>
         <View style={styles.access}>
           {app ? <View style={styles.bayLine} /> : null}
           <Text style={[styles.accessText, app && { color: colors.cta }]}>
-            {app ? "Opens from your phone when your booking starts" : "The host lets you in at the start time"}
+            {app ? t("book.accessApp") : t("book.accessManual")}
           </Text>
         </View>
       </View>
@@ -176,14 +179,14 @@ function BookForm({ garage, busy, reviews, from, to }: { garage: Garage; busy: B
       {garage.image_url ? <Image source={{ uri: garage.image_url }} style={styles.photo} contentFit="cover" /> : null}
 
       <View style={styles.facts}>
-        <Fact label="Size" value={`${SIZE_META[garage.size].label}, fits ${SIZE_META[garage.size].fits}`} />
-        <Fact label="Type" value={garage.covered ? "Covered" : "Open-air"} />
-        <Fact label="Per hour" value={formatMoney(garage.price_hour)} figure />
-        <Fact label="Per day" value={formatMoney(garage.price_day)} figure />
-        <Fact label="Free" value={summarizeAvailability(garage.availability)} />
+        <Fact label={t("book.size")} value={t("book.sizeValue", { size: SIZE_META[garage.size].label, fits: SIZE_META[garage.size].fits })} />
+        <Fact label={t("book.type")} value={garage.covered ? t("garage.covered") : t("garage.openAir")} />
+        <Fact label={t("book.perHour")} value={formatMoney(garage.price_hour)} figure />
+        <Fact label={t("book.perDay")} value={formatMoney(garage.price_day)} figure />
+        <Fact label={t("book.free")} value={summarizeAvailability(garage.availability)} />
       </View>
       {garage.description ? <Text style={styles.description}>{garage.description}</Text> : null}
-      <Button title="Directions" icon="navigate" variant="secondary" size="sm" onPress={() => openDirections(garage)} style={{ alignSelf: "flex-start", marginTop: spacing.md }} />
+      <Button title={t("book.directions")} icon="navigate" variant="secondary" size="sm" onPress={() => openDirections(garage)} style={{ alignSelf: "flex-start", marginTop: spacing.md }} />
 
       {spot ? (
         // A still preview: where it is at a glance; Directions opens Google Maps for the route
@@ -196,10 +199,10 @@ function BookForm({ garage, busy, reviews, from, to }: { garage: Garage; busy: B
 
   const booking = (
     <>
-      <SectionTitle>When?</SectionTitle>
-      <ChipRow options={MODES} value={mode} onChange={setMode} />
+      <SectionTitle>{t("book.when")}</SectionTitle>
+      <ChipRow options={modes} value={mode} onChange={setMode} />
 
-      <Text style={styles.label}>{mode === "hour" ? "Day" : "From"}</Text>
+      <Text style={styles.label}>{mode === "hour" ? t("book.day") : t("book.from")}</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.days}>
         {dayOptions.map((d) => {
           const selected = d.getTime() === day.getTime();
@@ -224,7 +227,7 @@ function BookForm({ garage, busy, reviews, from, to }: { garage: Garage; busy: B
         {mode === "hour" ? (
           <>
             <Stepper
-              label="Start"
+              label={t("book.start")}
               value={formatTime(start)}
               onMinus={() => setStartHour(hour - 1)}
               onPlus={() => setStartHour(hour + 1)}
@@ -232,8 +235,8 @@ function BookForm({ garage, busy, reviews, from, to }: { garage: Garage; busy: B
               canPlus={hour < 23}
             />
             <Stepper
-              label="For"
-              value={`${hours} h`}
+              label={t("book.for")}
+              value={t("duration.h", { h: hours })}
               onMinus={() => setHours(hours - 1)}
               onPlus={() => setHours(hours + 1)}
               canMinus={hours > 1}
@@ -243,8 +246,8 @@ function BookForm({ garage, busy, reviews, from, to }: { garage: Garage; busy: B
           </>
         ) : (
           <Stepper
-            label="For"
-            value={`${days} ${days === 1 ? "day" : "days"}`}
+            label={t("book.for")}
+            value={tn("duration.days", days)}
             onMinus={() => setDays(days - 1)}
             onPlus={() => setDays(days + 1)}
             canMinus={days > 1}
@@ -261,19 +264,19 @@ function BookForm({ garage, busy, reviews, from, to }: { garage: Garage; busy: B
       {clash ? (
         <View style={styles.clash} accessibilityRole="alert">
           <Ionicons name="alert-circle" size={18} color={colors.errorText} />
-          <Text style={styles.clashText}>Already booked {formatRange(clash.starts_at, clash.ends_at)}. Pick another time.</Text>
+          <Text style={styles.clashText}>{t("book.clash", { range: formatRange(clash.starts_at, clash.ends_at) })}</Text>
         </View>
       ) : outsideHours ? (
         <View style={styles.clash} accessibilityRole="alert">
           <Ionicons name="alert-circle" size={18} color={colors.errorText} />
           <Text style={styles.clashText}>
-            The host only rents it out {summarizeAvailability(garage.availability)}. Pick a time inside those hours.
+            {t("book.outsideHours", { hours: summarizeAvailability(garage.availability) })}
           </Text>
         </View>
       ) : null}
 
       <Button
-        title={`Book for ${formatMoney(total)}`}
+        title={t("book.submit", { price: formatMoney(total) })}
         icon="checkmark"
         variant="accent"
         loading={saving}
@@ -282,15 +285,14 @@ function BookForm({ garage, busy, reviews, from, to }: { garage: Garage; busy: B
         style={{ marginTop: spacing.lg }}
       />
       <Text style={styles.note}>
-        You pay on the next step.{" "}
-        {app ? "When your booking starts, open the door from My bookings." : "The host will let you in at the start time."}
+        {t("book.payNext")} {app ? t("book.noteApp") : t("book.noteManual")}
       </Text>
     </>
   );
 
   // "2 h × €3 = €6", from the server's numbers once the booking exists
   const breakdown = checkout
-    ? `${checkout.units} ${checkout.unit === "hour" ? "h" : checkout.units === 1 ? "day" : "days"} × ${formatCents(checkout.unit_price_cents)} = ${formatCents(checkout.amount_cents)}`
+    ? `${checkout.unit === "hour" ? t("duration.h", { h: checkout.units }) : tn("duration.days", checkout.units)} × ${formatCents(checkout.unit_price_cents)} = ${formatCents(checkout.amount_cents)}`
     : "";
   const sheet = (
     <PaySheet
@@ -307,7 +309,7 @@ function BookForm({ garage, busy, reviews, from, to }: { garage: Garage; busy: B
 
   return (
     <ScreenWrapper scroll>
-      <Header title="Book a garage" back />
+      <Header title={t("book.screenTitle")} back />
       <StepTracker active={1} />
 
       {wide ? (
@@ -338,21 +340,22 @@ function Fact({ label, value, figure }: { label: string; value: string; figure?:
 
 // What renters who parked here said: the average large, then each review as a flat row
 function Reviews({ rating, reviews }: { rating?: RatingSummary; reviews: Review[] }) {
+  const { t, tn } = useT();
   return (
     <>
-      <SectionTitle>Reviews</SectionTitle>
+      <SectionTitle>{t("reviews.title")}</SectionTitle>
       {rating?.count && rating.average != null ? (
         <View style={styles.ratingHead}>
           <Text style={styles.ratingFigure}>{rating.average.toFixed(1)}</Text>
           <View style={{ gap: 4 }}>
             <Stars value={rating.average} size={16} />
             <Text style={styles.factLabel}>
-              {rating.count} {rating.count === 1 ? "review" : "reviews"} from renters who parked here
+              {tn("reviews.fromRenters", rating.count)}
             </Text>
           </View>
         </View>
       ) : (
-        <Text style={styles.description}>No reviews yet. Renters can review a garage once their booking starts.</Text>
+        <Text style={styles.description}>{t("reviews.none")}</Text>
       )}
       {reviews.map((r) => (
         <View key={r.id} style={styles.review}>
@@ -379,12 +382,13 @@ type StepperProps = {
 };
 
 function Stepper({ label, value, onMinus, onPlus, canMinus, canPlus, divider }: StepperProps) {
+  const { t } = useT();
   return (
     <View style={[styles.stepper, divider && styles.divider]}>
       <Text style={styles.stepperLabel}>{label}</Text>
-      <StepButton icon="remove" label={`Less ${label.toLowerCase()}`} onPress={onMinus} disabled={!canMinus} />
+      <StepButton icon="remove" label={t("book.less", { what: label.toLowerCase() })} onPress={onMinus} disabled={!canMinus} />
       <Text style={styles.stepperValue}>{value}</Text>
-      <StepButton icon="add" label={`More ${label.toLowerCase()}`} onPress={onPlus} disabled={!canPlus} />
+      <StepButton icon="add" label={t("book.more", { what: label.toLowerCase() })} onPress={onPlus} disabled={!canPlus} />
     </View>
   );
 }

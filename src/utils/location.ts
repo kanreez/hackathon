@@ -1,10 +1,11 @@
 import * as Location from "expo-location";
+import { t } from "../i18n";
 
 export type Coords = { latitude: number; longitude: number };
 
 export async function getCurrentLocation(): Promise<Coords> {
   const { status } = await Location.requestForegroundPermissionsAsync();
-  if (status !== "granted") throw new Error("Location permission denied");
+  if (status !== "granted") throw new Error(t("err.locationDenied"));
 
   const pos = await Location.getCurrentPositionAsync({
     accuracy: Location.Accuracy.Balanced,

@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { ComponentProps } from "react";
 import { Pressable, StyleProp, StyleSheet, Text, View, ViewStyle } from "react-native";
 import { colors, radius, shadow, spacing, typography } from "../constants/theme";
+import { t } from "../i18n";
 
 // Small shared pieces of the Ignite system (DESIGN.md)
 
@@ -79,7 +80,7 @@ export function UrgentBanner({ text, style }: { text: string; style?: StyleProp<
         <Ionicons name="warning" size={22} color={colors.error} />
       </View>
       <View style={{ flex: 1, gap: 2 }}>
-        <Text style={styles.urgentEyebrow}>Do this first</Text>
+        <Text style={styles.urgentEyebrow}>{t("common.doFirst")}</Text>
         <Text style={styles.urgentText}>{text}</Text>
       </View>
     </View>
