@@ -1,7 +1,7 @@
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import { Platform, Pressable, StyleSheet, Text, View, ViewStyle } from "react-native";
-import { Headline, SectionTitle, Tag } from "../../components/Bits";
+import { Headline, SectionTitle } from "../../components/Bits";
 import { BrandMark } from "../../components/BrandMark";
 import { Button } from "../../components/Button";
 import { Card } from "../../components/Card";
@@ -217,14 +217,26 @@ export default function Find() {
 // position: sticky only exists on web; react-native-web passes it through
 const stickyOnWeb = (Platform.OS === "web" ? { position: "sticky", top: spacing.lg } : null) as ViewStyle | null;
 
+// One understood filter, set like a Bulgarian number plate: white strip, blue band on the left
+function Plate({ label }: { label: string }) {
+  return (
+    <View style={styles.plate}>
+      <View style={styles.plateBand} />
+      <Text style={styles.plateText} numberOfLines={1}>
+        {label}
+      </Text>
+    </View>
+  );
+}
+
 // Shows what the AI took from the request, so the renter can trust (or fix) the search
 function Understood({ result, onClear }: { result: SearchResult; onClear: () => void }) {
   const f = result.filters;
   const chips = [
-    f.area ? { icon: "location" as const, label: f.area } : null,
-    result.from_utc && result.to_utc ? { icon: "time" as const, label: formatRange(result.from_utc, result.to_utc) } : null,
-    f.vehicle_size ? { icon: "car" as const, label: `Fits ${SIZE_META[f.vehicle_size].hint}` } : null,
-    f.covered === true ? { icon: "umbrella" as const, label: "Covered" } : null,
+    f.area ? { label: f.area } : null,
+    result.from_utc && result.to_utc ? { label: formatRange(result.from_utc, result.to_utc) } : null,
+    f.vehicle_size ? { label: `Fits ${SIZE_META[f.vehicle_size].fits}` } : null,
+    f.covered === true ? { label: "Covered" } : null,
   ].filter((c) => c !== null);
 
   return (
@@ -238,7 +250,7 @@ function Understood({ result, onClear }: { result: SearchResult; onClear: () => 
       {chips.length ? (
         <View style={styles.chips}>
           {chips.map((c) => (
-            <Tag key={c.label} label={c.label} icon={c.icon} bg={colors.surface} />
+            <Plate key={c.label} label={c.label} />
           ))}
         </View>
       ) : (
@@ -263,16 +275,21 @@ const styles = StyleSheet.create({
     backgroundColor: colors.sand,
   },
   exampleText: { ...typography.caption, color: colors.ink },
-  understood: {
-    marginTop: spacing.md,
-    padding: spacing.md,
-    gap: spacing.sm,
-    borderRadius: radius.lg,
-    backgroundColor: colors.accentSoft,
-  },
+  understood: { marginTop: spacing.lg, gap: spacing.sm },
   understoodHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   clear: { ...typography.label, color: colors.accentDeep, textDecorationLine: "underline" },
-  chips: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  chips: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
+  plate: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    maxWidth: "100%",
+    minHeight: 32,
+    borderRadius: 4,
+    overflow: "hidden",
+    backgroundColor: colors.plate,
+  },
+  plateBand: { width: 10, backgroundColor: colors.accent },
+  plateText: { ...typography.label, color: colors.onInk, paddingHorizontal: 10, alignSelf: "center", flexShrink: 1, ...typography.tabular },
   caption: { ...typography.caption, color: colors.textMuted },
   resultsHead: { flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between", gap: spacing.md },
   viewToggle: { flexDirection: "row", gap: 6, marginBottom: spacing.sm },
