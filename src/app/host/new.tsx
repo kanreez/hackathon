@@ -12,6 +12,7 @@ import { Input } from "../../components/Input";
 import { LocationPicker, MapFocus } from "../../components/map/LocationPicker";
 import { ScreenWrapper } from "../../components/ScreenWrapper";
 import { ErrorState, Loading } from "../../components/StateViews";
+import { PhotoField } from "../../components/PhotoField";
 import { notify } from "../../components/Toast";
 import { ACCESS_META, AREA_CENTERS, areaLabel, AREAS, cityByName, cityCenter, cityLabel, DEFAULT_CITY, SIZE_META } from "../../constants/garages";
 import { colors, radius, spacing, typography } from "../../constants/theme";
@@ -92,7 +93,8 @@ function GarageForm({ garage }: { garage?: Garage }) {
   const [priceHour, setPriceHour] = useState(garage ? String(garage.price_hour) : "");
   const [priceDay, setPriceDay] = useState(garage ? String(garage.price_day) : "");
   const [access, setAccess] = useState<Access>(garage?.access ?? "app");
-  const [imageUrl, setImageUrl] = useState(garage?.image_url ?? "");
+  const [imageUrl, setImageUrl] = useState<string | null>(garage?.image_url ?? null);
+  const [uploading, setUploading] = useState(false);
   const [description, setDescription] = useState(garage?.description ?? "");
   const [availability, setAvailability] = useState<AvailabilityWindow[] | null>(garage?.availability ?? null);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -204,7 +206,6 @@ function GarageForm({ garage }: { garage?: Garage }) {
     if (!coords && (!garage || whereTouched)) next.coords = t("hostForm.errPin");
     if (!(toNumber(priceHour) > 0)) next.priceHour = t("hostForm.errPriceHour");
     if (!(toNumber(priceDay) > 0)) next.priceDay = t("hostForm.errPriceDay");
-    if (imageUrl.trim() && !/^https?:\/\//.test(imageUrl.trim())) next.imageUrl = t("hostForm.errImage");
     if (availability && !availability.length) next.availability = t("hostForm.errAvailability");
     setErrors(next);
     return !Object.keys(next).length;
@@ -226,7 +227,7 @@ function GarageForm({ garage }: { garage?: Garage }) {
         price_hour: toNumber(priceHour),
         price_day: toNumber(priceDay),
         access,
-        image_url: imageUrl.trim() || null,
+        image_url: imageUrl,
         description: description.trim() || null,
         availability,
       };
@@ -337,15 +338,7 @@ function GarageForm({ garage }: { garage?: Garage }) {
         <Field label={t("book.type")}>
           <ChipRow options={coverOptions()} value={cover} onChange={setCover} />
         </Field>
-        <Input
-          label={t("hostForm.image")}
-          placeholder="https://…"
-          autoCapitalize="none"
-          keyboardType="url"
-          value={imageUrl}
-          onChangeText={setImageUrl}
-          error={errors.imageUrl}
-        />
+        <PhotoField value={imageUrl} onChange={setImageUrl} onBusy={setUploading} />
         <Input
           label={t("hostForm.description")}
           placeholder={t("hostForm.descriptionPlaceholder")}
@@ -383,7 +376,7 @@ function GarageForm({ garage }: { garage?: Garage }) {
         </Field>
       </Card>
 
-      <Button title={garage ? t("review.saveChanges") : t("hostForm.submit")} icon="checkmark" variant="accent" loading={saving} onPress={save} style={{ marginTop: spacing.sm }} />
+      <Button title={garage ? t("review.saveChanges") : t("hostForm.submit")} icon="checkmark" variant="accent" loading={saving} disabled={uploading} onPress={save} style={{ marginTop: spacing.sm }} />
     </ScreenWrapper>
   );
 }

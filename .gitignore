@@ -44,3 +44,5 @@ example
 .env
 server/.env
 server/node_modules
+# Garage photos saved locally when Supabase Storage is unavailable
+server/uploads/

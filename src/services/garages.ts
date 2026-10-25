@@ -39,6 +39,11 @@ export async function updateGarage(id: string, input: GarageInput) {
   return (await api.patch<{ garage: Garage }>(`/api/garages/${id}`, input)).garage;
 }
 
+// Host side: uploads a photo (base64 JPEG from utils/photo.ts) -> its public URL for image_url
+export async function uploadGaragePhoto(base64: string) {
+  return (await api.post<{ url: string }>("/api/uploads/garage-photo", { data: base64 })).url;
+}
+
 // Host only. Hidden = off search and no new bookings; bookings already made keep working.
 export async function setGarageHidden(id: string, hidden: boolean) {
   return (await api.put<{ garage: Garage }>(`/api/garages/${id}/visibility`, { hidden })).garage;

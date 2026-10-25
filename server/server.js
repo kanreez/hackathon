@@ -9,6 +9,7 @@ const G = require("./garages");
 const { createRepo } = require("./repo");
 const U = require("./usernames");
 const geo = require("./geocode");
+const photos = require("./photos");
 const { createPaymentProvider, PaymentError } = require("./payments/provider");
 const { computePrice } = require("./payments/pricing");
 
@@ -39,9 +40,18 @@ const authClient = () =>
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   });
 const payments = createPaymentProvider(repo);
+const photoStore = photos.createPhotoStore(supabase);
+
+// Photos arrive as base64 JSON, too big for the default 100 kB body limit. That route reads its
+// own body, after the login check.
+const PHOTO_PATH = "/api/uploads/garage-photo";
+const jsonBody = express.json();
+const photoBody = express.json({ limit: "8mb" });
 
 app.use(cors());
-app.use(express.json());
+app.use((req, res, next) => (req.path === PHOTO_PATH ? next() : jsonBody(req, res, next)));
+// Photos saved here when Supabase Storage can't be used (see photos.js). Only images ever land here.
+app.use("/uploads", express.static(photos.UPLOADS_DIR, { index: false, maxAge: "365d", setHeaders: (res) => res.set("X-Content-Type-Options", "nosniff") }));
 
 // Verifies the Supabase access token sent by the app
 async function requireAuth(req, res, next) {
@@ -932,6 +942,37 @@ app.post("/api/device/ack", requireDevice, route(async (req, res) => {
   });
   res.json({ ok: true });
 }));
+
+// ==========================================
+// Garage photos (host side)
+// ==========================================
+// Body: { data: base64 JPEG/PNG/WebP, at most 5 MB } -> { url }. The app puts the URL in the
+// listing's image_url when the host saves. 30 uploads per user per hour.
+const PHOTO_LIMIT = 30;
+const photoUploads = new Map(); // user id -> upload times in the last hour
+app.post(PHOTO_PATH, requireAuth, photoBody, route(async (req, res) => {
+  const now = Date.now();
+  const recent = (photoUploads.get(req.user.id) ?? []).filter((t) => now - t < 3600000);
+  if (recent.length >= PHOTO_LIMIT) return res.status(429).json({ error: "Too many photos for now. Try again in an hour." });
+
+  const buffer = photos.decodeBase64(req.body?.data);
+  if (!buffer?.length) return res.status(400).json({ error: "Pick a photo to upload" });
+  if (buffer.length > photos.MAX_BYTES) return res.status(413).json({ error: "That photo is too big. Pick a smaller one." });
+  const type = photos.sniff(buffer);
+  if (!type) return res.status(400).json({ error: "That file isn't a photo. Use a JPEG, PNG or WebP." });
+
+  recent.push(now);
+  photoUploads.set(req.user.id, recent);
+  const url = await photoStore.save({ buffer, type, userId: req.user.id, baseUrl: `${req.protocol}://${req.get("host")}` });
+  res.status(201).json({ url });
+}));
+
+// A body over the limit, or JSON that doesn't parse: answer in JSON like every other error
+app.use((err, _req, res, _next) => {
+  if (err.type === "entity.too.large") return res.status(413).json({ error: "That photo is too big. Pick a smaller one." });
+  if (err.type === "entity.parse.failed") return res.status(400).json({ error: "Invalid JSON" });
+  res.status(500).json({ error: err.message });
+});
 
 app.listen(PORT, (err) => {
   if (err) {
