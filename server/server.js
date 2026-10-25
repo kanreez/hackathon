@@ -1,6 +1,6 @@
 const crypto = require("crypto");
-const fs = require("fs");
 const path = require("path");
+const fs = require("fs");
 // Load server/.env no matter which folder the server is started from
 require("dotenv").config({ path: path.join(__dirname, ".env") });
 const express = require("express");
@@ -25,6 +25,7 @@ if (!process.env.OPENAI_API_KEY && !process.env.GEMINI_API_KEY && !process.env.A
 }
 
 const app = express();
+app.set("trust proxy", true); // behind Kuso's ingress: req.protocol is https, not http
 const PORT = process.env.PORT || 3000;
 
 const supabase = createClient(
@@ -84,14 +85,9 @@ async function requireDevice(req, res, next) {
 const route = (fn) => (req, res) =>
   fn(req, res).catch((err) => res.status(err instanceof PaymentError ? err.status : 500).json({ error: err.message }));
 
-// The web app, when it has been built (npx expo export --platform web -> dist/). On kuso one
-// service serves the app and this API from the same address; locally there's usually no dist/.
-const WEB_DIR = path.join(__dirname, "..", "dist");
-const hasWeb = fs.existsSync(path.join(WEB_DIR, "index.html"));
-if (hasWeb) app.use(express.static(WEB_DIR, { maxAge: "1h" }));
-
-app.get("/", (_req, res) => res.json({ status: "ok" }));
 app.get("/api/health", (_req, res) => res.json({ status: "ok" }));
+// Without a web build next to it, "/" answers like the health check (see WEB_DIR below)
+if (!fs.existsSync(path.join(__dirname, "..", "dist", "index.html"))) app.get("/", (_req, res) => res.json({ status: "ok" }));
 
 app.get("/api/me", requireAuth, async (req, res) => {
   const { data, error } = await supabase
@@ -1007,13 +1003,12 @@ app.post(PHOTO_PATH, requireAuth, photoBody, route(async (req, res) => {
   res.status(201).json({ url });
 }));
 
-// Any other page of the web app (/bookings, /garage/123...) is the same index.html: the app's
-// router takes it from there
-if (hasWeb) {
-  app.use((req, res, next) => {
-    if (req.method !== "GET" || req.path.startsWith("/api/") || req.path.startsWith("/uploads/")) return next();
-    res.sendFile(path.join(WEB_DIR, "index.html"));
-  });
+// The web app, when it's been built into dist/ (the Docker image does this). Unknown non-API
+// paths get index.html so Expo Router can handle deep links like /garage/g1.
+const WEB_DIR = path.join(__dirname, "..", "dist");
+if (fs.existsSync(path.join(WEB_DIR, "index.html"))) {
+  app.use(express.static(WEB_DIR, { index: "index.html" }));
+  app.get(/^(?!\/api\/|\/uploads\/).*/, (_req, res) => res.sendFile(path.join(WEB_DIR, "index.html")));
 }
 
 // A body over the limit, or JSON that doesn't parse: answer in JSON like every other error

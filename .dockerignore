@@ -1,0 +1,14 @@
+node_modules
+server/node_modules
+.git
+.expo
+.claude
+dist
+web-build
+ios
+android
+firmware
+.env
+.env*.local
+server/.env
+server/uploads
