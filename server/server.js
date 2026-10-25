@@ -7,6 +7,7 @@ const { createClient } = require("@supabase/supabase-js");
 const { askAnthropic } = require("./anthropic");
 const G = require("./garages");
 const { createRepo } = require("./repo");
+const U = require("./usernames");
 const { createPaymentProvider, PaymentError } = require("./payments/provider");
 const { computePrice } = require("./payments/pricing");
 
@@ -28,6 +29,14 @@ const supabase = createClient(
 );
 
 const repo = createRepo(supabase);
+const usernames = U.createUsernames(supabase);
+
+// A throwaway client for signing users in or up. Never sign in on the shared `supabase` client:
+// it would swap the service role for that user's session and every later query would run as them.
+const authClient = () =>
+  createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+  });
 const payments = createPaymentProvider(repo);
 
 app.use(cors());
@@ -74,6 +83,111 @@ app.get("/api/me", requireAuth, async (req, res) => {
   if (error) return res.status(500).json({ error: error.message });
   res.json({ user: { id: req.user.id, email: req.user.email }, profile: data });
 });
+
+// ==========================================
+// Accounts: log in with a username or email, sign up with a picked username, change it later
+// ==========================================
+const sessionTokens = (session) => ({ access_token: session.access_token, refresh_token: session.refresh_token });
+
+// Slows down password guessing: at most LOGIN_ATTEMPTS tries per identifier and address per window
+const LOGIN_ATTEMPTS = 8;
+const LOGIN_WINDOW_MS = 10 * 60000;
+const loginTries = new Map();
+function tooManyTries(key) {
+  const now = Date.now();
+  const recent = (loginTries.get(key) ?? []).filter((t) => now - t < LOGIN_WINDOW_MS);
+  recent.push(now);
+  loginTries.set(key, recent);
+  return recent.length > LOGIN_ATTEMPTS;
+}
+
+// Body: { identifier: username or email, password } -> { access_token, refresh_token }.
+// The app sets that session itself. The same message for every failure, so it never reveals
+// whether a username exists or which email is behind it.
+const BAD_LOGIN = "Wrong username, email or password";
+app.post("/api/auth/login", route(async (req, res) => {
+  const identifier = String(req.body?.identifier ?? "").trim();
+  const password = String(req.body?.password ?? "");
+  if (!identifier || !password) return res.status(400).json({ error: "Enter your username or email and your password" });
+  if (tooManyTries(`${req.ip}|${identifier.toLowerCase()}`)) {
+    return res.status(429).json({ error: "Too many tries. Wait a few minutes and try again." });
+  }
+
+  let email = identifier;
+  if (!identifier.includes("@")) {
+    const id = await usernames.idFor(identifier);
+    const user = id ? (await supabase.auth.admin.getUserById(id)).data?.user : null;
+    if (!user?.email) return res.status(401).json({ error: BAD_LOGIN });
+    email = user.email;
+  }
+  const { data, error } = await authClient().auth.signInWithPassword({ email, password });
+  if (error) {
+    const unconfirmed = /confirm/i.test(error.message);
+    return res.status(401).json({ error: unconfirmed ? "Confirm your email first: check your inbox" : BAD_LOGIN });
+  }
+  res.json(sessionTokens(data.session));
+}));
+
+const NAME_MAX = 40;
+const cleanName = (v) => String(v ?? "").trim().replace(/\s+/g, " ").slice(0, NAME_MAX);
+
+// Body: { first_name, last_name, email, password }. Creates the account, then picks a free
+// username from the name ("Ivan Petrov" -> ivan.petrov, ivan.petrov2...). Returns the session
+// when email confirmation is off, or { needs_confirmation: true }.
+app.post("/api/auth/signup", route(async (req, res) => {
+  const first = cleanName(req.body?.first_name);
+  const last = cleanName(req.body?.last_name);
+  const email = String(req.body?.email ?? "").trim();
+  const password = String(req.body?.password ?? "");
+  if (!first || !last) return res.status(400).json({ error: "Enter your first and last name" });
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: "Enter a valid email" });
+  if (password.length < 6) return res.status(400).json({ error: "Use at least 6 characters for the password" });
+
+  const fullName = `${first} ${last}`;
+  const { data, error } = await authClient().auth.signUp({ email, password, options: { data: { full_name: fullName } } });
+  if (error) return res.status(400).json({ error: error.message });
+  // Supabase hides an existing account by returning a user with no identities
+  if (!data.user || data.user.identities?.length === 0) {
+    return res.status(409).json({ error: "An account with this email already exists. Log in instead." });
+  }
+
+  // The database trigger has made the profile row; give it the name and a free username.
+  // Two sign-ups can race for the same one, so retry when the unique index says it's gone.
+  const base = U.baseFromName(first, last);
+  let username = null;
+  for (let attempt = 0; attempt < 3 && !username; attempt++) {
+    const candidate = await usernames.pickFree(base);
+    const { error: e } = await supabase.from("profiles").upsert({ id: data.user.id, full_name: fullName, username: candidate });
+    if (!e) username = candidate;
+    else if (e.code !== "23505") throw new Error(e.message);
+  }
+
+  res.status(201).json({
+    username,
+    ...(data.session ? sessionTokens(data.session) : { needs_confirmation: true }),
+  });
+}));
+
+// ?name= -> { available, problem } for the live check in Settings
+app.get("/api/usernames/check", requireAuth, route(async (req, res) => {
+  const name = String(req.query.name ?? "").trim().toLowerCase();
+  const problem = U.usernameProblem(name);
+  if (problem) return res.json({ available: false, problem });
+  const available = await usernames.isAvailable(name, req.user.id);
+  res.json({ available, problem: available ? null : "That username is taken" });
+}));
+
+// Body: { username } -> { username }. Saved lowercase; ignoring case, nobody else may have it.
+app.put("/api/me/username", requireAuth, route(async (req, res) => {
+  const name = String(req.body?.username ?? "").trim().toLowerCase();
+  const problem = U.usernameProblem(name);
+  if (problem) return res.status(400).json({ error: problem });
+  if (!(await usernames.isAvailable(name, req.user.id))) return res.status(409).json({ error: "That username is taken" });
+  const { error } = await supabase.from("profiles").update({ username: name, updated_at: new Date().toISOString() }).eq("id", req.user.id);
+  if (error?.code === "23505") return res.status(409).json({ error: "That username is taken" });
+  if (error) throw new Error(error.message);
+  res.json({ username: name });
+}));
 
 // ==========================================
 // AI: Claude, then Gemini Flash-Lite, then Gemini, then OpenAI, each only if its key is set
