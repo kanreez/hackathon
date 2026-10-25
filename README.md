@@ -1,81 +1,193 @@
-# Hackathon boilerplate
+# GarageGo
 
-Expo (Router) + Supabase auth + a small Node/Express backend for AI calls.
+Rent a neighbour's garage by the hour, anywhere in Bulgaria. Say what you need in plain words
+("покрит гараж в Лозенец утре от 9 до 13 за джип"), book it, pay, and open the door from your phone.
+
+Built for JA Hack 2026. Live web version: **https://bodom.junioraccelerator.org**
+
+## What it does
+
+**Renters**
+- **Search in plain language**, Bulgarian or English. An AI turns the request into filters (city, Sofia district, time, car size, covered) and also reads each garage's title and description, so "гараж със зарядно" finds the one that mentions an EV charger.
+- **Book** by the hour or the day. The time picker starts at the current minute, so time someone just freed can be booked.
+- **Pay** through a mock checkout. No real money moves (test cards below).
+- **Open and close the garage door** from the app while the booking is active. An ESP32 on the door does the rest.
+- **Leave early** to free the rest of the time for others. There's no refund.
+- **Review** a stay with 1 to 5 stars and a comment.
+
+**Hosts**
+- **List a garage** in any of Bulgaria's 27 regional cities:
+  - type the address and tap **Find on map**, or tap the map;
+  - upload or take a photo;
+  - set the free hours and the prices.
+- **Hide** a listing for a while, or **delete** it for good. Deleting is refused while bookings are still running.
+- **See earnings** and **pair the door's device** using its key.
+
+**Everyone**
+- Log in with a username or an email.
+- Change the username and the language in Settings. Bulgarian is the default.
+
+## How it fits together
+
+```
+ Phone / browser (Expo app)
+        │  HTTPS, user's Supabase token
+        ▼
+ Express server (server/) ──► Supabase: auth, Postgres, Storage (garage photos)
+        │        │
+        │        ├──► AI search: Claude Haiku → Gemini Flash-Lite → Gemini → OpenAI (first that answers)
+        │        └──► OpenStreetMap Nominatim (address search, via one rate-limited queue)
+        ▲
+        │  polls every 300 ms with its device key
+ ESP32 on the garage door (firmware/garage_bridge)
+```
+
+The server is the only authority:
+- **Prices:** it sets the price; the app never sends an amount.
+- **Payments:** it decides whether a booking is paid.
+- **Door:** it only queues a door command for a renter whose paid booking covers right now.
+- **Device keys:** renters never see a garage's device key, and the phone never talks to the ESP32.
+
+**AI search safety:** the user's request and the hosts' listing text are both treated as untrusted data. They're cleaned, fenced off in the prompt, and checked against a strict schema. Off-topic requests get a fixed hint instead of an AI answer.
+
+## Project layout
+
+```
+src/app/              Screens (Expo Router)
+  (auth)/             Log in, sign up
+  (tabs)/index.tsx    Find: AI search, list and map
+  (tabs)/bookings.tsx My bookings: door panel, tickets, leave early, reviews
+  (tabs)/profile.tsx  Profile
+  garage/[id].tsx     Garage page: details, reviews, time picker, pay
+  host/index.tsx      Your garages: hide, delete, earnings, device pairing
+  host/new.tsx        List or edit a garage: city, address search, map pin, photo
+  settings.tsx        Username and language
+src/components/       UI pieces (map/, CityPicker, PhotoField, DoorPanel, PaySheet, Stars...)
+src/i18n/             en.ts and bg.ts (every string in both), errors.ts (server messages)
+src/services/         API calls to the server
+server/               Express API: server.js (routes), garages.js (rules + AI prompts),
+                      repo.js (Supabase, or memory before the tables exist), geocode.js,
+                      photos.js, usernames.js, payments/ (mock provider, pricing)
+supabase/             SQL to run in the Supabase SQL editor
+firmware/             ESP32 door bridge (Arduino), runs in Wokwi or on a real board
+```
 
 ## Setup
 
-1. Install dependencies
+You need Node 22.13 or newer, a Supabase project, and at least one AI key (Anthropic, Gemini or OpenAI).
+
+1. **Install** the dependencies:
 
    ```bash
    npm install
    ```
 
-2. App env: copy `.env.example` to `.env` in the project root and fill in the Supabase URL and publishable key.
+2. **App settings:** copy `.env.example` to `.env` in the project root. Fill in:
+   - the Supabase URL;
+   - the publishable (anon) key. Never use the secret key here.
 
-3. Backend env (only needed for AI / `/api/*`): copy `server/.env.example` to `server/.env` and fill in the Supabase URL, the secret key and a Gemini key. Get the secret key privately, never through git.
+3. **Server settings:** copy `server/.env.example` to `server/.env`. Fill in:
+   - `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` (the secret key);
+   - at least one of `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `OPENAI_API_KEY`.
+
+   Share the secret values privately, never through a public place.
+
+4. **Database:** in Supabase, open the SQL editor and run these in order:
+   1. a `profiles` table, if your project doesn't have one yet:
+
+      ```sql
+      create table if not exists public.profiles (
+        id uuid primary key references auth.users (id) on delete cascade,
+        username text,
+        full_name text,
+        avatar_url text,
+        updated_at timestamptz
+      );
+      alter table public.profiles enable row level security;
+      ```
+
+   2. `supabase/garages.sql`: garages, bookings, payments, door commands, and seven sample garages in Sofia;
+   3. `supabase/reviews.sql`;
+   4. `supabase/usernames.sql`;
+   5. `supabase/garage-visibility.sql`: hide, delete, leave early;
+   6. `supabase/cities.sql`: cities, plus sample garages in Plovdiv and Varna.
+
+   **Notes:**
+   - Until the tables exist, the server runs on built-in sample data kept in memory, so the app works straight away.
+   - The photo bucket `garage-photos` is created by the server on the first upload.
 
 ## Run
 
 Two terminals, both in the project root:
 
 ```bash
-npm run server          # backend on port 3000
-npx expo start -c       # app (press w for web, or scan the QR code with Expo Go)
+npm run server        # API on port 3000
 ```
 
-- The app finds the backend on your PC automatically in development, also from a real phone on the same Wi-Fi. If Windows asks whether Node may use the network, allow it on private networks.
-- After editing `.env`, always restart with `npx expo start -c`.
-- Install packages with `npx expo install <package>`, not `npm install <package>`, so versions match the Expo SDK.
-
-## Hackathon day checklist
-
-1. **Rename the app**: `src/constants/app.ts` (name, tagline) and `name`/`slug` in `app.json`.
-2. **Re-skin**: colors, font and radii all live in `src/constants/theme.ts`. Swap the marigold `accent` for the theme's color and you're most of the way there.
-3. **Model the data**: rename the `Item` type and `CATEGORIES` in `src/constants/mockData.ts`, then build screens against mock data (`USE_MOCK = true` in `src/services/items.ts`).
-4. **Switch to Supabase**: adapt and run `supabase/items.sql`, then set `USE_MOCK = false`.
-5. **Give the AI a job**: edit `SYSTEM_PROMPT` and `SUGGESTIONS` in `src/app/(tabs)/ai.tsx`; use `askAIJson()` when a screen needs data back, not text.
-
-## What's included
-
-| Screen | File | What it does |
-| --- | --- | --- |
-| Log in / Register | `src/app/(auth)/` | Email + password with inline errors |
-| Home | `src/app/(tabs)/index.tsx` | Greeting, ask-the-assistant box, quick actions, recent and top rated items |
-| Explore | `src/app/(tabs)/explore.tsx` | Search, category chips, "Nearby" sort by distance, pull to refresh, empty states |
-| Item detail | `src/app/item/[id].tsx` | Photo, details, open in maps, AI tips, edit, delete |
-| Item form | `src/app/item/edit.tsx` | Create (`/item/edit`) and edit (`/item/edit?id=…`), photo, location, validation |
-| Assistant | `src/app/(tabs)/ai.tsx` | Chat with Gemini, plain answers or structured JSON |
-| Profile | `src/app/(tabs)/profile.tsx` | Avatar upload, name/username, log out |
-
-Building blocks:
-
-```
-src/components/   Button, Input, Card, Chip/ChipRow, Header/IconButton, Avatar, ItemRow,
-                  StateViews (Loading, EmptyState, ErrorState), Toast (notify), BrandMark
-src/constants/    theme.ts (design tokens), app.ts (name), mockData.ts, authStyles.ts
-src/hooks/        useAsync (loading/error/data + reload), useRefreshOnFocus
-src/services/     db.ts (CRUD for any table), items.ts (mock ↔ Supabase switch),
-                  supabase.ts, api.ts (backend calls with the user's token),
-                  userService.ts (profiles), storage.ts (image upload)
-src/utils/        ai.ts (askAI, askAIJson), location.ts, media.ts (pick/take photo)
-server/           server.js: /api/me, /api/ai (Gemini, optional system prompt + JSON mode)
-supabase/         items.sql: example table, security policies and the images bucket
+```bash
+npx expo start -c     # the app: press w for web, or scan the QR code with Expo Go
 ```
 
-Useful snippets:
+- **Phone:** a phone on the same Wi-Fi finds the server on your PC by itself. If Windows asks whether Node may use the network, allow it on private networks.
+- **After changing `.env`:** restart with `npx expo start -c`.
+- **After changing anything in `server/`:** restart `npm run server`.
+- **Adding packages:** use `npx expo install <package>`, so the versions match Expo SDK 58.
 
-```ts
-notify("Saved");                         // toast on web and phone (Alert.alert does nothing on web)
-notify(e.message, "error");
+## Try it
 
-const { data, loading, error, reload } = useAsync(() => listRows<Event>("events"), []);
+- **Search:** try `гараж със зарядно`, `покрит гараж в Лозенец утре от 9 до 13 за джип`, `гараж в Пловдив утре` or `garage for a van with a roof box`.
+- **Pay:** with the demo wallet, or one of these test cards:
 
-const tips = await askAI("3 tips for...", { system: "You are a coach." });
-const { ideas } = await askAIJson<{ ideas: { title: string }[] }>('3 ideas as {"ideas":[{"title":string}]}');
+  | Card | Result |
+  |---|---|
+  | `4242 4242 4242 4242` | paid |
+  | `4000 0000 0000 0002` | declined |
+  | `4000 0000 0000 9995` | insufficient funds |
+  | `4000 0000 0000 3220` | asks you to confirm in the "bank app" |
+
+- **Door without hardware:**
+
+  ```bash
+  node server/fake-device.js
+  ```
+
+  This pretends to be the ESP32 of the sample garage "Covered garage by Pirogov". Book that garage for now, pay, and tap **Open** in My bookings. Use `FAIL=1` to test the error state.
+- **Your own garage's door:** run `node server/fake-device.js <device key>`. The key is shown under **Pair a device** in Your garages.
+
+## The door (ESP32)
+
+`firmware/garage_bridge/garage_bridge.ino` polls `GET /api/device/commands` with its device key. When a command arrives, it clicks a relay wired to the opener's wall button, then reports back with `POST /api/device/ack`.
+
+- **In the Wokwi simulator:**
+  1. Run `cloudflared tunnel --url http://localhost:3000`.
+  2. Put the `https://….trycloudflare.com` address it prints in `SERVER_URL`.
+  3. Paste the sketch and `diagram.json` into Wokwi.
+- **On a real board:**
+  1. Put your 2.4 GHz Wi-Fi and `http://<server PC IP>:3000` (or the deployed URL) in the sketch.
+  2. Wire relay `IN` to GPIO 4, and the relay's COM/NO to the opener's button terminals.
+- **Demo key:** the sample garages use `dev-door-lagera-1` and `dev-door-krasno-2`.
+
+## Deploy
+
+The live site runs on **kuso**, the JA Hack hosting.
+- **Source:** it builds from the `main` branch of `ja-hack-2026/bodom`; every push there redeploys.
+- **One container:** the `Dockerfile` builds the web version of the app (`expo export`), and the Express server serves both it and the API from the same address.
+- **Settings:** the server's keys and the two `EXPO_PUBLIC_SUPABASE_*` values are set on the kuso service. The full deploy guide is in that repo's `AGENTS.md`.
+
+## Checks
+
+```bash
+npx tsc --noEmit
 ```
 
-## Supabase checklist
+```bash
+npx expo lint
+```
 
-- `profiles` table exists (used by `userService.ts`, the Profile screen and `/api/me`).
-- Storage bucket `images` exists and is public (created by `supabase/items.sql`).
-- For the demo: turn off "Confirm email" (Authentication → Sign In / Providers → Email) and create a demo account.
+## Tech
+
+- **App:** Expo SDK 58, Expo Router, React Native 0.88, react-native-maps (phone) and Leaflet (web).
+- **Server:** Express 5, Supabase (auth, Postgres, Storage).
+- **AI:** Claude Haiku 5.5 with Gemini and OpenAI as fallbacks.
+- **Address search:** OpenStreetMap Nominatim.
+- **Door:** an ESP32 running Arduino.
