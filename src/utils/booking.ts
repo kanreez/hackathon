@@ -9,11 +9,10 @@ const pad = (n: number) => String(n).padStart(2, "0");
 export const toLocalIso = (d: Date) =>
   `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 
-export const startOfHour = (d: Date) => {
-  const x = new Date(d);
-  x.setMinutes(0, 0, 0);
-  return x;
-};
+// Subtracts instead of setMinutes(0): in the hour repeated when the clocks go back,
+// setMinutes(0) jumps to the first 03:00, an hour too early
+export const startOfHour = (d: Date) =>
+  new Date(d.getTime() - (d.getMinutes() * 60000 + d.getSeconds() * 1000 + d.getMilliseconds()));
 
 export const startOfDay = (d: Date) => {
   const x = new Date(d);
