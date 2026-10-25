@@ -7,13 +7,15 @@ import { supabase } from "./supabase";
 // so the backend on the same PC is reachable from a real phone without editing anything.
 // On web it's the address the page was opened at, so another laptop on the Wi-Fi that opens
 // http://<your PC>:8081 talks to the backend on your PC, not to "localhost" on itself.
+// A production web build is served by the backend itself (see Dockerfile), so it calls its own origin.
 // Set EXPO_PUBLIC_API_URL to override (e.g. a deployed backend).
 const devHost =
   Platform.OS === "web" && typeof window !== "undefined"
     ? window.location.hostname
     : Constants.expoConfig?.hostUri?.split(":")[0];
+const sameOrigin = Platform.OS === "web" && !__DEV__ && typeof window !== "undefined" ? window.location.origin : null;
 const BASE_URL =
-  process.env.EXPO_PUBLIC_API_URL || (devHost ? `http://${devHost}:3000` : "http://localhost:3000");
+  process.env.EXPO_PUBLIC_API_URL || sameOrigin || (devHost ? `http://${devHost}:3000` : "http://localhost:3000");
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const { data } = await supabase.auth.getSession();
