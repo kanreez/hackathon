@@ -8,6 +8,7 @@ const { askAnthropic } = require("./anthropic");
 const G = require("./garages");
 const { createRepo } = require("./repo");
 const U = require("./usernames");
+const geo = require("./geocode");
 const { createPaymentProvider, PaymentError } = require("./payments/provider");
 const { computePrice } = require("./payments/pricing");
 
@@ -396,13 +397,21 @@ app.get("/api/garages/:id", requireAuth, route(async (req, res) => {
   });
 }));
 
+// A column a later SQL file adds is missing: tell the host which file to run
+const migrationNeeded = (file) => `The database needs an update first: run supabase/${file} in Supabase`;
+const MIGRATION_NEEDED = migrationNeeded("garage-visibility.sql"); // hidden, deleted_at, left_early_at
+const missingColumn = (e) => /column/i.test(e?.message ?? "") && /schema cache|does not exist/i.test(e.message);
+
 // Host listing body -> { fields } ready to store, or { error }. Used by create and edit.
+// city: one of G.CITIES (older app builds send none: Sofia). area: the Sofia district, or in other
+// cities an optional free-text district; blank means the city's name.
 function garageFields(b = {}) {
   const errors = [];
   const title = String(b.title ?? "").trim();
-  const area = String(b.area ?? "").trim();
+  const city = b.city == null || b.city === "" ? G.DEFAULT_CITY : String(b.city);
+  if (!G.cityByName(city)) errors.push("city must be one of the listed cities");
+  const area = String(b.area ?? "").trim() || city;
   if (!title) errors.push("title is required");
-  if (!area) errors.push("area is required");
   if (!G.SIZES.includes(b.size)) errors.push(`size must be one of ${G.SIZES.join(", ")}`);
   if (!G.ACCESS.includes(b.access)) errors.push(`access must be one of ${G.ACCESS.join(", ")}`);
   const priceHour = Number(b.price_hour);
@@ -412,6 +421,7 @@ function garageFields(b = {}) {
   const lat = b.latitude == null ? null : Number(b.latitude);
   const lng = b.longitude == null ? null : Number(b.longitude);
   if ((lat != null && !Number.isFinite(lat)) || (lng != null && !Number.isFinite(lng))) errors.push("location is invalid");
+  else if (lat != null && lng != null && !G.inBulgaria(lat, lng)) errors.push("location must be in Bulgaria");
   const description = String(b.description ?? "").trim();
   if (description.length > G.DESCRIPTION_MAX) errors.push(`description can be at most ${G.DESCRIPTION_MAX} characters`);
   const { availability, error: availabilityError } = G.normalizeAvailability(b.availability);
@@ -421,6 +431,7 @@ function garageFields(b = {}) {
   return {
     fields: {
       title: title.slice(0, 120),
+      city,
       area: area.slice(0, 80),
       address: String(b.address ?? "").trim().slice(0, 160) || null,
       latitude: lat,
@@ -441,7 +452,8 @@ function garageFields(b = {}) {
 app.post("/api/garages", requireAuth, route(async (req, res) => {
   const { fields, error } = garageFields(req.body);
   if (error) return res.status(400).json({ error });
-  const garage = await repo.createGarage({ host_id: req.user.id, ...fields });
+  const garage = await saveWithCity(fields, (f) => repo.createGarage({ host_id: req.user.id, ...f }));
+  if (!garage) return res.status(503).json({ error: migrationNeeded("cities.sql") });
   res.status(201).json({ garage });
 }));
 
@@ -452,12 +464,45 @@ app.patch("/api/garages/:id", requireAuth, route(async (req, res) => {
   if (garage.host_id !== req.user.id) return res.status(403).json({ error: "Only the garage's host can edit it" });
   const { fields, error } = garageFields(req.body);
   if (error) return res.status(400).json({ error });
-  res.json({ garage: await repo.updateGarage(garage.id, fields) });
+  const saved = await saveWithCity(fields, (f) => repo.updateGarage(garage.id, f));
+  if (!saved) return res.status(503).json({ error: migrationNeeded("cities.sql") });
+  res.json({ garage: saved });
 }));
 
-// hidden / deleted_at / left_early_at come from supabase/garage-visibility.sql
-const MIGRATION_NEEDED = "The database needs an update first: run supabase/garage-visibility.sql in Supabase";
-const missingColumn = (e) => /column/i.test(e?.message ?? "") && /schema cache|does not exist/i.test(e.message);
+// Before supabase/cities.sql adds the city column, a Sofia garage still saves (without it);
+// any other city returns null so the caller can say which SQL to run
+async function saveWithCity(fields, save) {
+  try {
+    return await save(fields);
+  } catch (e) {
+    if (!missingColumn(e)) throw e;
+    if (fields.city !== G.DEFAULT_CITY) return null;
+    const { city: _city, ...rest } = fields;
+    return save(rest);
+  }
+}
+
+// ==========================================
+// Address lookup for the listing form (OpenStreetMap Nominatim, see geocode.js)
+// ==========================================
+const geoLang = (v) => (v === "en" ? "en" : "bg");
+const finiteOrNull = (v) => (v == null || v === "" || !Number.isFinite(Number(v)) ? null : Number(v));
+
+// ?q=<address>&city=<city name>&lang=bg|en -> { results: [{ label, address, district, city, latitude, longitude }], unavailable? }
+app.get("/api/geo/search", requireAuth, route(async (req, res) => {
+  const q = String(req.query.q ?? "").replace(/\s+/g, " ").trim();
+  if (q.length < 3 || q.length > 160) return res.status(400).json({ error: "Type 3 to 160 characters of the address" });
+  if (!G.cityByName(String(req.query.city ?? ""))) return res.status(400).json({ error: "city must be one of the listed cities" });
+  res.json(await geo.searchAddress({ q, city: String(req.query.city), lang: geoLang(req.query.lang) }));
+}));
+
+// ?lat=&lng=&lang=bg|en -> { result: {...} | null, unavailable? }
+app.get("/api/geo/reverse", requireAuth, route(async (req, res) => {
+  const lat = finiteOrNull(req.query.lat);
+  const lng = finiteOrNull(req.query.lng);
+  if (lat == null || lng == null || !G.inBulgaria(lat, lng)) return res.status(400).json({ error: "location must be in Bulgaria" });
+  res.json(await geo.reverseGeocode({ lat, lng, lang: geoLang(req.query.lang) }));
+}));
 
 async function ownGarage(req, res) {
   const garage = await repo.getGarage(req.params.id);
@@ -548,12 +593,14 @@ app.post("/api/garages/search", requireAuth, route(async (req, res) => {
   const matches = garages.filter(
     (g) =>
       !g.hidden &&
+      (!filters.city || (g.city ?? G.DEFAULT_CITY) === filters.city) &&
       G.fits(g.size, filters.vehicle_size) &&
       (filters.covered !== true || g.covered) &&
       (!fromUtc || G.isAvailable(g, fromUtc, toUtc)) &&
       (!fromUtc || !bookings.some((b) => b.garage_id === g.id && G.overlaps(b.starts_at, b.ends_at, fromUtc, toUtc)))
   );
-  const area = G.AREAS.find((a) => a.name === filters.area);
+  // Sort and frame around the area asked for, else the city
+  const area = G.AREAS.find((a) => a.name === filters.area) ?? G.cityByName(filters.city);
 
   res.json({
     filters,

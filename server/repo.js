@@ -18,6 +18,7 @@ const seedGarage = (id, fields) => ({
   image_url: null,
   description: null,
   availability: null,
+  city: "Sofia",
   device_key: SEED_KEYS[id] ?? newDeviceKey(),
   created_at: new Date().toISOString(),
   ...fields,
@@ -53,6 +54,15 @@ const SEED_GARAGES = [
   seedGarage("g7", {
     title: "Covered spot on Cherni Vrah (sample)", area: "Lozenets", address: "bul. Cherni Vrah 47",
     latitude: 42.6712, longitude: 23.3261, size: "small", covered: true, price_hour: 2, price_day: 13, access: "manual",
+  }),
+  // Outside Sofia, same as the samples in supabase/cities.sql
+  seedGarage("g8", {
+    title: "Garage near the Old Town (sample)", area: "Center", city: "Plovdiv",
+    latitude: 42.1478, longitude: 24.7495, size: "medium", covered: true, price_hour: 2.5, price_day: 15, access: "manual",
+  }),
+  seedGarage("g9", {
+    title: "Garage by the Sea Garden (sample)", area: "Center", city: "Varna",
+    latitude: 43.2043, longitude: 27.9196, size: "large", covered: true, price_hour: 3, price_day: 18, access: "manual",
   }),
 ];
 
