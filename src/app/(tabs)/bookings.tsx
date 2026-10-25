@@ -15,7 +15,7 @@ import { useRefreshOnFocus } from "../../hooks/useRefreshOnFocus";
 import { getCommand, myBookings, sendDoorCommand } from "../../services/garages";
 import { cancelBooking } from "../../services/payments";
 import { Booking, DoorAction } from "../../types/garage";
-import { formatCents, formatDuration, formatRange, formatTime } from "../../utils/booking";
+import { formatCents, formatDay, formatDuration, formatTime } from "../../utils/booking";
 
 const POLL_MS = 1000;
 const GIVE_UP_MS = 30000; // the server already fails a command after 20 s; this is a safety net
@@ -241,15 +241,24 @@ function BookingRow({ booking, now, note, muted, onChanged }: RowProps) {
     }
   };
 
+  const inAt = new Date(booking.starts_at);
+  const outAt = new Date(booking.ends_at);
+
+  // A parking ticket: In and Out times on top, a tear line, then what it is and what it cost
   return (
-    <Card style={[styles.rowCard, muted && { opacity: 0.7 }]}>
-      <View style={styles.row}>
-        <IconTile icon={g?.access === "app" ? "phone-portrait" : "key"} size={44} />
+    <View style={[styles.ticket, muted && { opacity: 0.7 }]}>
+      <View style={styles.times}>
+        <TicketTime label="In" at={inAt} />
+        <TicketTime label="Out" at={outAt} />
+      </View>
+
+      <Perforation />
+
+      <View style={styles.stub}>
         <View style={{ flex: 1, gap: 2 }}>
           <Text style={styles.rowTitle} numberOfLines={1}>
             {g?.title ?? "Garage"}
           </Text>
-          <Text style={styles.caption}>{formatRange(booking.starts_at, booking.ends_at)}</Text>
           <View style={styles.tagRow}>
             <Tag label={tag.label} bg={tag.bg} color={tag.color} />
             {booking.payment && booking.status !== "pending_payment" && booking.status !== "expired" ? (
@@ -274,7 +283,31 @@ function BookingRow({ booking, now, note, muted, onChanged }: RowProps) {
           <Button title="Cancel booking" size="sm" variant="ghost" icon="close-circle" onPress={() => setConfirming(true)} style={styles.cancelBtn} />
         )
       ) : null}
-    </Card>
+    </View>
+  );
+}
+
+function TicketTime({ label, at }: { label: string; at: Date }) {
+  return (
+    <View style={{ flex: 1 }}>
+      <Text style={styles.caption}>{label}</Text>
+      <Text style={styles.ticketTime}>{formatTime(at)}</Text>
+      <Text style={styles.caption}>{formatDay(at)}</Text>
+    </View>
+  );
+}
+
+// The tear line: punched holes in the ground colour, with a notch cut into each edge
+const HOLES = 14;
+function Perforation() {
+  return (
+    <View style={styles.perf} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+      <View style={[styles.notch, { left: -9 }]} />
+      {Array.from({ length: HOLES }, (_, i) => (
+        <View key={i} style={styles.hole} />
+      ))}
+      <View style={[styles.notch, { right: -9 }]} />
+    </View>
   );
 }
 
@@ -297,12 +330,17 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     backgroundColor: colors.sand,
   },
-  rowCard: { marginBottom: spacing.sm, gap: spacing.sm },
-  row: { flexDirection: "row", alignItems: "center", gap: spacing.md },
+  ticket: { marginBottom: spacing.md, paddingHorizontal: spacing.md, paddingVertical: 14, gap: 12, borderRadius: radius.lg, backgroundColor: colors.surface },
+  times: { flexDirection: "row", gap: spacing.md },
+  ticketTime: { ...typography.figure, fontSize: 32, lineHeight: 36, color: colors.ink },
+  perf: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginHorizontal: -spacing.md, paddingHorizontal: 18, height: 18 },
+  notch: { position: "absolute", width: 18, height: 18, borderRadius: 9, backgroundColor: colors.background },
+  hole: { width: 4, height: 4, borderRadius: 2, backgroundColor: colors.background },
+  stub: { flexDirection: "row", alignItems: "flex-start", gap: spacing.md },
   rowTitle: { ...typography.h3, color: colors.ink },
   tagRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, flexWrap: "wrap", marginTop: 2 },
   note: { ...typography.label, color: colors.accentDeep },
-  price: { ...typography.h3, color: colors.ink },
+  price: { ...typography.figureSm, color: colors.ink },
   struck: { textDecorationLine: "line-through", color: colors.textMuted },
   paidLine: { ...typography.label, color: colors.success },
   confirmRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, flexWrap: "wrap" },
