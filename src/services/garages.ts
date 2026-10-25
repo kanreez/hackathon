@@ -1,4 +1,4 @@
-import { Booking, BookingMode, BusySlot, Checkout, Command, DoorAction, Garage, GarageInput, SearchResult } from "../types/garage";
+import { Booking, BookingMode, BusySlot, Checkout, Command, DoorAction, Garage, GarageInput, Review, SearchResult } from "../types/garage";
 import { toLocalIso } from "../utils/booking";
 import { api } from "./api";
 
@@ -11,7 +11,7 @@ export async function listGarages() {
 }
 
 export async function getGarage(id: string) {
-  return api.get<{ garage: Garage; busy: BusySlot[] }>(`/api/garages/${id}`);
+  return api.get<{ garage: Garage; busy: BusySlot[]; reviews: Review[] }>(`/api/garages/${id}`);
 }
 
 // Plain-language request -> AI filters + matching garages
@@ -57,6 +57,11 @@ export async function myBookings() {
 // Asks the server to open or close the door; the ESP32 picks the command up within about a second
 export async function sendDoorCommand(garageId: string, action: DoorAction) {
   return (await api.post<{ command_id: string }>(`/api/garages/${garageId}/${action}`)).command_id;
+}
+
+// Create or edit your review of a stay. The server checks it's your paid booking and it has started.
+export async function saveReview(bookingId: string, rating: number, comment: string) {
+  return (await api.put<{ review: Review }>(`/api/bookings/${bookingId}/review`, { rating, comment })).review;
 }
 
 export async function getCommand(id: string) {

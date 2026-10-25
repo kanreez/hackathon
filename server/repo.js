@@ -56,10 +56,31 @@ const SEED_GARAGES = [
   }),
 ];
 
+// Clearly labelled sample reviews so the demo's sample garages aren't all "No reviews yet"
+const sampleReview = (garageId, days, rating, comment, author) => ({
+  id: crypto.randomUUID(),
+  garage_id: garageId,
+  booking_id: null,
+  renter_id: null,
+  rating,
+  comment,
+  author_name: `${author} (sample)`,
+  created_at: new Date(Date.now() - days * 86400000).toISOString(),
+  updated_at: new Date(Date.now() - days * 86400000).toISOString(),
+});
+
+const SEED_REVIEWS = [
+  sampleReview("g1", 3, 5, "Door opened the second I tapped. Plenty of room for a Golf.", "Ivan P."),
+  sampleReview("g1", 9, 4, "Easy to find, a bit tight on the ramp.", "Maria K."),
+  sampleReview("g2", 5, 5, "Wide enough for our van, and dry inside.", "Georgi D."),
+  sampleReview("g3", 12, 4, "Small but fine for a city car, right by the metro.", "Elena S."),
+  sampleReview("g5", 7, 3, "Host was late with the key, garage itself is good.", "Nikolay T."),
+];
+
 const TABLE_RECHECK_MS = 30000;
 
 function createRepo(supabase) {
-  const mem = { garages: [...SEED_GARAGES], bookings: [], payments: [], commands: [] };
+  const mem = { garages: [...SEED_GARAGES], bookings: [], payments: [], commands: [], reviews: [...SEED_REVIEWS] };
   const tableOk = {}; // table -> { ok, checkedAt }
 
   // Whether Supabase has the table; falls back to memory if not. A found table is remembered;
@@ -269,6 +290,53 @@ function createRepo(supabase) {
     return mem.payments.filter((p) => bookingIds.includes(p.booking_id));
   }
 
+  // ---------- reviews ----------
+  // One review per booking; renters edit theirs instead of adding another
+  async function listReviewsForGarage(garageId, limit = 20) {
+    if (await hasTable("reviews")) {
+      return must(
+        await supabase.from("reviews").select("*").eq("garage_id", garageId).order("created_at", { ascending: false }).limit(limit)
+      );
+    }
+    return mem.reviews
+      .filter((r) => r.garage_id === garageId)
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+      .slice(0, limit);
+  }
+
+  // Average and count per garage, for the garage list
+  async function ratingSummaries() {
+    const rows = (await hasTable("reviews"))
+      ? must(await supabase.from("reviews").select("garage_id, rating"))
+      : mem.reviews;
+    const byGarage = new Map();
+    for (const r of rows) {
+      const s = byGarage.get(r.garage_id) ?? { sum: 0, count: 0 };
+      s.sum += r.rating;
+      s.count += 1;
+      byGarage.set(r.garage_id, s);
+    }
+    return new Map([...byGarage].map(([id, s]) => [id, { average: Math.round((s.sum / s.count) * 10) / 10, count: s.count }]));
+  }
+
+  async function listReviewsForBookings(bookingIds) {
+    if (!bookingIds.length) return [];
+    if (await hasTable("reviews")) return must(await supabase.from("reviews").select("*").in("booking_id", bookingIds));
+    return mem.reviews.filter((r) => bookingIds.includes(r.booking_id));
+  }
+
+  async function upsertReview(fields) {
+    const row = { ...fields, updated_at: new Date().toISOString() };
+    if (await hasTable("reviews")) {
+      return must(await supabase.from("reviews").upsert(row, { onConflict: "booking_id" }).select("*").single());
+    }
+    const existing = mem.reviews.find((r) => r.booking_id === fields.booking_id);
+    if (existing) return Object.assign(existing, row);
+    const review = { id: crypto.randomUUID(), created_at: row.updated_at, ...row };
+    mem.reviews.push(review);
+    return review;
+  }
+
   // ---------- door commands ----------
   async function createCommand(fields) {
     const row = { action: "open", status: "queued", ...fields };
@@ -341,6 +409,10 @@ function createRepo(supabase) {
     getPaymentByKey,
     updatePayment,
     listPaymentsForBookings,
+    listReviewsForGarage,
+    ratingSummaries,
+    listReviewsForBookings,
+    upsertReview,
     createCommand,
     getCommand,
     updateCommand,

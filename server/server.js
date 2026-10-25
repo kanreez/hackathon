@@ -192,8 +192,31 @@ const deviceLastSeen = new Map(); // garage id -> ISO time of the device's last 
 // Busy slots for a garage (start/end only, no renter details)
 const busySlots = (bookings) => bookings.map((b) => ({ starts_at: b.starts_at, ends_at: b.ends_at }));
 
+// ---------- reviews ----------
+const NO_RATING = { average: null, count: 0 };
+
+// What anyone may see of a review: no renter or booking ids
+const publicReview = (r) => ({
+  id: r.id,
+  rating: r.rating,
+  comment: r.comment,
+  author_name: r.author_name,
+  created_at: r.created_at,
+  updated_at: r.updated_at,
+});
+
+// "Maria Ivanova" -> "Maria I."; never the email
+function shortName(user, profile) {
+  const full = String(profile?.full_name || user.user_metadata?.full_name || "").trim();
+  if (!full) return "A renter";
+  const [first, ...rest] = full.split(/\s+/);
+  const last = rest.pop();
+  return last ? `${first} ${last[0].toUpperCase()}.` : first;
+}
+
 app.get("/api/garages", requireAuth, route(async (_req, res) => {
-  res.json({ garages: (await repo.listGarages()).map(G.publicGarage) });
+  const [garages, ratings] = await Promise.all([repo.listGarages(), repo.ratingSummaries()]);
+  res.json({ garages: garages.map((g) => ({ ...G.publicGarage(g), rating: ratings.get(g.id) ?? NO_RATING })) });
 }));
 
 // The host's own garages, including the device key to flash onto the ESP32
@@ -206,10 +229,15 @@ app.get("/api/garages/:id", requireAuth, route(async (req, res) => {
   const garage = await repo.getGarage(req.params.id);
   if (!garage) return res.status(404).json({ error: "Garage not found" });
   const isHost = garage.host_id === req.user.id;
-  const bookings = await repo.listBookingsForGarage(garage.id);
+  const [bookings, reviews, ratings] = await Promise.all([
+    repo.listBookingsForGarage(garage.id),
+    repo.listReviewsForGarage(garage.id),
+    repo.ratingSummaries(),
+  ]);
   res.json({
-    garage: isHost ? garage : G.publicGarage(garage),
+    garage: { ...(isHost ? garage : G.publicGarage(garage)), rating: ratings.get(garage.id) ?? NO_RATING },
     busy: busySlots(bookings.filter((b) => new Date(b.ends_at) > new Date())),
+    reviews: reviews.map(publicReview),
   });
 }));
 
@@ -303,7 +331,7 @@ app.post("/api/garages/search", requireAuth, route(async (req, res) => {
   let toUtc = G.localToUtc(filters.to, tzOffset, timeZone);
   if (!fromUtc || !toUtc || new Date(toUtc) <= new Date(fromUtc)) fromUtc = toUtc = null;
 
-  const [garages, bookings] = await Promise.all([repo.listGarages(), repo.listAllLiveBookings()]);
+  const [garages, bookings, ratings] = await Promise.all([repo.listGarages(), repo.listAllLiveBookings(), repo.ratingSummaries()]);
   const matches = garages.filter(
     (g) =>
       G.fits(g.size, filters.vehicle_size) &&
@@ -318,7 +346,7 @@ app.post("/api/garages/search", requireAuth, route(async (req, res) => {
     from_utc: fromUtc,
     to_utc: toUtc,
     center: area ? { latitude: area.latitude, longitude: area.longitude } : null,
-    garages: matches.map(G.publicGarage),
+    garages: matches.map((g) => ({ ...G.publicGarage(g), rating: ratings.get(g.id) ?? NO_RATING })),
   });
 }));
 
@@ -410,16 +438,45 @@ const paymentSummary = (p) =>
 
 app.get("/api/bookings/mine", requireAuth, route(async (req, res) => {
   const [bookings, garages] = await Promise.all([repo.listBookingsByRenter(req.user.id), repo.listGarages()]);
-  const pays = await repo.listPaymentsForBookings(bookings.map((b) => b.id));
+  const ids = bookings.map((b) => b.id);
+  const [pays, reviews] = await Promise.all([repo.listPaymentsForBookings(ids), repo.listReviewsForBookings(ids)]);
   const byId = new Map(garages.map((g) => [g.id, G.publicGarage(g)]));
   const payByBooking = new Map(pays.map((p) => [p.booking_id, p]));
+  const reviewByBooking = new Map(reviews.map((r) => [r.booking_id, publicReview(r)]));
   res.json({
     bookings: bookings.map((b) => ({
       ...b,
       garage: byId.get(b.garage_id) ?? null,
       payment: paymentSummary(payByBooking.get(b.id)) ?? null,
+      review: reviewByBooking.get(b.id) ?? null,
     })),
   });
+}));
+
+// Renter reviews a stay: { rating: 1-5, comment? }. Only the booking's renter, only once it's
+// paid and has started (they've actually used the garage). Saving again edits the same review.
+const MAX_COMMENT = 500;
+app.put("/api/bookings/:id/review", requireAuth, route(async (req, res) => {
+  const booking = await repo.getBooking(req.params.id);
+  if (!booking || booking.renter_id !== req.user.id) return res.status(404).json({ error: "Booking not found" });
+  if (booking.status !== "paid") return res.status(409).json({ error: "Only paid bookings can be reviewed" });
+  if (new Date(booking.starts_at) > new Date()) return res.status(409).json({ error: "You can review this garage once your booking starts" });
+
+  const rating = Number(req.body?.rating);
+  if (!Number.isInteger(rating) || rating < 1 || rating > 5) return res.status(400).json({ error: "Pick 1 to 5 stars" });
+  const comment = String(req.body?.comment ?? "").trim();
+  if (comment.length > MAX_COMMENT) return res.status(400).json({ error: `Keep the comment under ${MAX_COMMENT} characters` });
+
+  const { data: profile } = await supabase.from("profiles").select("full_name").eq("id", req.user.id).maybeSingle();
+  const review = await repo.upsertReview({
+    booking_id: booking.id,
+    garage_id: booking.garage_id,
+    renter_id: req.user.id,
+    rating,
+    comment: comment || null,
+    author_name: shortName(req.user, profile),
+  });
+  res.json({ review: publicReview(review) });
 }));
 
 // Renter cancels. Paid and not started yet -> cancelled and refunded. Unpaid (e.g. the pay

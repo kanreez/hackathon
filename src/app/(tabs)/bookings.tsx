@@ -5,6 +5,7 @@ import { IconTile, SectionTitle, Tag } from "../../components/Bits";
 import { Button } from "../../components/Button";
 import { Card } from "../../components/Card";
 import { DoorPanel, DoorVisual } from "../../components/DoorPanel";
+import { canReview, ReviewBox } from "../../components/ReviewBox";
 import { Header } from "../../components/Header";
 import { ScreenWrapper } from "../../components/ScreenWrapper";
 import { EmptyState, ErrorState, Loading } from "../../components/StateViews";
@@ -60,7 +61,7 @@ export default function Bookings() {
       ) : (
         <>
           {active.map((b) => (
-            <ActiveBooking key={b.id} booking={b} now={now} />
+            <ActiveBooking key={b.id} booking={b} now={now} onReviewed={refresh} />
           ))}
 
           {upcoming.length ? (
@@ -82,7 +83,7 @@ export default function Bookings() {
             <>
               <SectionTitle muted>Past</SectionTitle>
               {past.map((b) => (
-                <BookingRow key={b.id} booking={b} now={now} muted />
+                <BookingRow key={b.id} booking={b} now={now} muted onReviewed={refresh} />
               ))}
             </>
           ) : null}
@@ -98,7 +99,7 @@ type Door =
   | { phase: "done"; action: DoorAction; at: Date }
   | { phase: "error"; message: string };
 
-function ActiveBooking({ booking, now }: { booking: Booking; now: Date }) {
+function ActiveBooking({ booking, now, onReviewed }: { booking: Booking; now: Date; onReviewed: () => void }) {
   const g = booking.garage;
   const [door, setDoor] = useState<Door>({ phase: "idle" });
   // Whether the last command that went through opened the door, so the button offers the other one
@@ -190,6 +191,7 @@ function ActiveBooking({ booking, now }: { booking: Booking; now: Date }) {
       <Text style={styles.paidLine}>
         Paid {formatCents(amountOf(booking))} with {paidWith(booking)}
       </Text>
+      <ReviewBox booking={booking} onSaved={onReviewed} />
     </Card>
   );
 }
@@ -215,9 +217,9 @@ function statusTag(b: Booking): { label: string; bg: string; color: string } {
   return { label: "Not paid", bg: colors.errorSoft, color: colors.errorText };
 }
 
-type RowProps = { booking: Booking; now: Date; note?: string; muted?: boolean; onChanged?: () => void };
+type RowProps = { booking: Booking; now: Date; note?: string; muted?: boolean; onChanged?: () => void; onReviewed?: () => void };
 
-function BookingRow({ booking, now, note, muted, onChanged }: RowProps) {
+function BookingRow({ booking, now, note, muted, onChanged, onReviewed }: RowProps) {
   const g = booking.garage;
   const [confirming, setConfirming] = useState(false);
   const [cancelling, setCancelling] = useState(false);
@@ -246,15 +248,15 @@ function BookingRow({ booking, now, note, muted, onChanged }: RowProps) {
 
   // A parking ticket: In and Out times on top, a tear line, then what it is and what it cost
   return (
-    <View style={[styles.ticket, muted && { opacity: 0.7 }]}>
-      <View style={styles.times}>
+    <View style={styles.ticket}>
+      <View style={[styles.times, muted && styles.dim]}>
         <TicketTime label="In" at={inAt} />
         <TicketTime label="Out" at={outAt} />
       </View>
 
       <Perforation />
 
-      <View style={styles.stub}>
+      <View style={[styles.stub, muted && styles.dim]}>
         <View style={{ flex: 1, gap: 2 }}>
           <Text style={styles.rowTitle} numberOfLines={1}>
             {g?.title ?? "Garage"}
@@ -283,6 +285,8 @@ function BookingRow({ booking, now, note, muted, onChanged }: RowProps) {
           <Button title="Cancel booking" size="sm" variant="ghost" icon="close-circle" onPress={() => setConfirming(true)} style={styles.cancelBtn} />
         )
       ) : null}
+
+      {canReview(booking, now) ? <ReviewBox booking={booking} onSaved={onReviewed ?? onChanged} /> : null}
     </View>
   );
 }
@@ -345,4 +349,5 @@ const styles = StyleSheet.create({
   paidLine: { ...typography.label, color: colors.success },
   confirmRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, flexWrap: "wrap" },
   cancelBtn: { alignSelf: "flex-start" },
+  dim: { opacity: 0.7 },
 });

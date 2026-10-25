@@ -5,6 +5,7 @@ import { Garage } from "../types/garage";
 import { formatMoney } from "../utils/booking";
 import { openDirections } from "../utils/maps";
 import { RowAction } from "./Bits";
+import { RatingLine } from "./Stars";
 
 type Props = {
   garage: Garage;
@@ -36,6 +37,7 @@ export function GarageRow({ garage: g, distanceKm, onPress }: Props) {
         <Text style={styles.caption} numberOfLines={1}>
           {spec}
         </Text>
+        <RatingLine rating={g.rating} />
         {app ? <Text style={styles.app}>Opens from your phone</Text> : null}
       </View>
       <View style={styles.prices}>

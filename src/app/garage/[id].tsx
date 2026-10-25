@@ -11,6 +11,7 @@ import { Header } from "../../components/Header";
 import { AppMap } from "../../components/map/AppMap";
 import { PaySheet } from "../../components/PaySheet";
 import { ScreenWrapper } from "../../components/ScreenWrapper";
+import { Stars } from "../../components/Stars";
 import { ErrorState, Loading } from "../../components/StateViews";
 import { StepTracker } from "../../components/StepTracker";
 import { notify } from "../../components/Toast";
@@ -20,7 +21,7 @@ import { useAsync } from "../../hooks/useAsync";
 import { useIsWide } from "../../hooks/useIsWide";
 import { createBooking, getGarage } from "../../services/garages";
 import { cancelBooking } from "../../services/payments";
-import { BookingMode, BusySlot, Checkout, Garage } from "../../types/garage";
+import { BookingMode, BusySlot, Checkout, Garage, RatingSummary, Review } from "../../types/garage";
 import {
   addDays,
   addHours,
@@ -38,6 +39,7 @@ import {
 } from "../../utils/booking";
 import { isAvailable, summarizeAvailability } from "../../utils/availability";
 import { openDirections } from "../../utils/maps";
+import { timeAgo } from "../../utils/time";
 
 type IconName = ComponentProps<typeof Ionicons>["name"];
 
@@ -69,7 +71,7 @@ export default function Book() {
       </ScreenWrapper>
     );
   }
-  return <BookForm garage={data.garage} busy={data.busy} from={from} to={to} />;
+  return <BookForm garage={data.garage} busy={data.busy} reviews={data.reviews ?? []} from={from} to={to} />;
 }
 
 // Where the picker starts: the time the AI understood if there was one, else from this hour
@@ -94,7 +96,7 @@ function initialPick(from?: string, to?: string) {
   return { mode: "hour" as BookingMode, day: startOfDay(minStart), startHour: minStart.getHours(), hours: 2, days: 1 };
 }
 
-function BookForm({ garage, busy, from, to }: { garage: Garage; busy: BusySlot[]; from?: string; to?: string }) {
+function BookForm({ garage, busy, reviews, from, to }: { garage: Garage; busy: BusySlot[]; reviews: Review[]; from?: string; to?: string }) {
   const [initial] = useState(() => initialPick(from, to));
   const [mode, setMode] = useState<BookingMode>(initial.mode);
   const [day, setDay] = useState(initial.day);
@@ -187,6 +189,8 @@ function BookForm({ garage, busy, from, to }: { garage: Garage; busy: BusySlot[]
         // A still preview: where it is at a glance; Directions opens Google Maps for the route
         <AppMap center={spot} zoom={16} picked={spot} interactive={false} style={styles.map} />
       ) : null}
+
+      <Reviews rating={garage.rating} reviews={reviews} />
     </>
   );
 
@@ -332,6 +336,38 @@ function Fact({ label, value, figure }: { label: string; value: string; figure?:
   );
 }
 
+// What renters who parked here said: the average large, then each review as a flat row
+function Reviews({ rating, reviews }: { rating?: RatingSummary; reviews: Review[] }) {
+  return (
+    <>
+      <SectionTitle>Reviews</SectionTitle>
+      {rating?.count && rating.average != null ? (
+        <View style={styles.ratingHead}>
+          <Text style={styles.ratingFigure}>{rating.average.toFixed(1)}</Text>
+          <View style={{ gap: 4 }}>
+            <Stars value={rating.average} size={16} />
+            <Text style={styles.factLabel}>
+              {rating.count} {rating.count === 1 ? "review" : "reviews"} from renters who parked here
+            </Text>
+          </View>
+        </View>
+      ) : (
+        <Text style={styles.description}>No reviews yet. Renters can review a garage once their booking starts.</Text>
+      )}
+      {reviews.map((r) => (
+        <View key={r.id} style={styles.review}>
+          <View style={styles.reviewHead}>
+            <Stars value={r.rating} size={13} />
+            <Text style={styles.reviewAuthor}>{r.author_name}</Text>
+            <Text style={styles.factLabel}>{timeAgo(r.created_at)}</Text>
+          </View>
+          {r.comment ? <Text style={styles.reviewText}>{r.comment}</Text> : null}
+        </View>
+      ))}
+    </>
+  );
+}
+
 type StepperProps = {
   label: string;
   value: string;
@@ -399,6 +435,12 @@ const styles = StyleSheet.create({
   factLabel: { ...typography.label, color: colors.textMuted, width: 84 },
   factValue: { ...typography.h3, color: colors.ink, flex: 1 },
   factFigure: { ...typography.figureSm },
+  ratingHead: { flexDirection: "row", alignItems: "center", gap: spacing.md, marginBottom: spacing.sm },
+  ratingFigure: { ...typography.figure, color: colors.ink },
+  review: { gap: 6, paddingVertical: 12, borderTopWidth: 1, borderTopColor: colors.border },
+  reviewHead: { flexDirection: "row", alignItems: "center", gap: spacing.sm, flexWrap: "wrap" },
+  reviewAuthor: { ...typography.label, color: colors.ink },
+  reviewText: { ...typography.body, color: colors.ink },
   label: { ...typography.label, color: colors.ink, marginTop: spacing.lg, marginBottom: spacing.sm },
   days: { gap: spacing.sm, paddingRight: spacing.lg },
   dayTile: {

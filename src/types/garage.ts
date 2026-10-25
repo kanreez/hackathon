@@ -27,6 +27,20 @@ export type Garage = {
   // Only on the host's own garages
   device_key?: string;
   device_last_seen?: string | null;
+  // From reviews; missing on search results
+  rating?: RatingSummary;
+};
+
+// ---------- reviews ----------
+export type RatingSummary = { average: number | null; count: number };
+
+export type Review = {
+  id: string;
+  rating: number; // 1-5
+  comment: string | null;
+  author_name: string; // "Maria I."
+  created_at: string;
+  updated_at: string;
 };
 
 export type GarageInput = Pick<
@@ -65,6 +79,7 @@ export type Booking = {
   created_at: string;
   garage: Garage | null;
   payment: PaymentSummary | null;
+  review: Review | null; // the renter's own review of this stay
 };
 
 // ---------- payments (mock provider on the server; amounts in euro cents) ----------
