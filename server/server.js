@@ -371,7 +371,7 @@ function shortName(user, profile) {
 
 app.get("/api/garages", requireAuth, route(async (_req, res) => {
   const [garages, ratings] = await Promise.all([repo.listGarages(), repo.ratingSummaries()]);
-  res.json({ garages: garages.map((g) => ({ ...G.publicGarage(g), rating: ratings.get(g.id) ?? NO_RATING })) });
+  res.json({ garages: garages.filter((g) => !g.hidden).map((g) => ({ ...G.publicGarage(g), rating: ratings.get(g.id) ?? NO_RATING })) });
 }));
 
 // The host's own garages, including the device key to flash onto the ESP32
@@ -455,6 +455,61 @@ app.patch("/api/garages/:id", requireAuth, route(async (req, res) => {
   res.json({ garage: await repo.updateGarage(garage.id, fields) });
 }));
 
+// hidden / deleted_at / left_early_at come from supabase/garage-visibility.sql
+const MIGRATION_NEEDED = "The database needs an update first: run supabase/garage-visibility.sql in Supabase";
+const missingColumn = (e) => /column/i.test(e?.message ?? "") && /schema cache|does not exist/i.test(e.message);
+
+async function ownGarage(req, res) {
+  const garage = await repo.getGarage(req.params.id);
+  if (!garage) {
+    res.status(404).json({ error: "Garage not found" });
+    return null;
+  }
+  if (garage.host_id !== req.user.id) {
+    res.status(403).json({ error: "Only the garage's host can edit it" });
+    return null;
+  }
+  return garage;
+}
+
+// Host hides the listing (gone from search, no new bookings) or shows it again. Bookings
+// already made stay, and their renters can still open the door.
+app.put("/api/garages/:id/visibility", requireAuth, route(async (req, res) => {
+  const garage = await ownGarage(req, res);
+  if (!garage) return;
+  const hidden = req.body?.hidden;
+  if (typeof hidden !== "boolean") return res.status(400).json({ error: "hidden must be true or false" });
+  try {
+    res.json({ garage: await repo.updateGarage(garage.id, { hidden }) });
+  } catch (e) {
+    if (missingColumn(e)) return res.status(503).json({ error: MIGRATION_NEEDED });
+    throw e;
+  }
+}));
+
+// Host deletes the listing for good. Not while someone holds time in it that hasn't ended:
+// hide it instead and delete it after the last booking. The door's device key stops working.
+app.delete("/api/garages/:id", requireAuth, route(async (req, res) => {
+  const garage = await ownGarage(req, res);
+  if (!garage) return;
+  const now = new Date();
+  const ongoing = (await repo.listBookingsForGarage(garage.id)).filter((b) => new Date(b.ends_at) > now);
+  if (ongoing.length) {
+    return res.status(409).json({
+      error: "This garage still has bookings that haven't ended. Hide it now and delete it after the last one.",
+      bookings: ongoing.length,
+    });
+  }
+  try {
+    await repo.deleteGarage(garage.id);
+  } catch (e) {
+    if (missingColumn(e)) return res.status(503).json({ error: MIGRATION_NEEDED });
+    throw e;
+  }
+  deviceLastSeen.delete(garage.id);
+  res.json({ deleted: true });
+}));
+
 // Plain-language search -> AI filters -> matching garages
 // Body: { query, now_local: "YYYY-MM-DDTHH:mm", tz_offset: Date#getTimezoneOffset(), time_zone?: "Europe/Sofia" }
 const searchCache = new Map(); // same question in the same hour -> same filters, no second AI call
@@ -492,6 +547,7 @@ app.post("/api/garages/search", requireAuth, route(async (req, res) => {
   const [garages, bookings, ratings] = await Promise.all([repo.listGarages(), repo.listAllLiveBookings(), repo.ratingSummaries()]);
   const matches = garages.filter(
     (g) =>
+      !g.hidden &&
       G.fits(g.size, filters.vehicle_size) &&
       (filters.covered !== true || g.covered) &&
       (!fromUtc || G.isAvailable(g, fromUtc, toUtc)) &&
@@ -521,13 +577,14 @@ app.post("/api/bookings", requireAuth, route(async (req, res) => {
   const { garage_id, starts_at, ends_at, mode } = req.body || {};
   const garage = await repo.getGarage(garage_id);
   if (!garage) return res.status(404).json({ error: "Garage not found" });
+  if (garage.hidden) return res.status(409).json({ error: "This garage isn't taking bookings right now" });
   if (!G.BOOKING_MODES.includes(mode)) return res.status(400).json({ error: "mode must be hour or day" });
 
   const start = new Date(starts_at);
   const end = new Date(ends_at);
   if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return res.status(400).json({ error: "Invalid dates" });
   if (end <= start) return res.status(400).json({ error: "The end must be after the start" });
-  // A booking may start at the top of the current hour, not earlier
+  // A booking may start within the current hour (the app sends the current minute), not earlier
   if (start < new Date(Date.now() - G.HOUR_MS)) return res.status(400).json({ error: "That time has already passed" });
   if (end - start > MAX_BOOKING_DAYS * 24 * G.HOUR_MS) return res.status(400).json({ error: `Bookings can be at most ${MAX_BOOKING_DAYS} days` });
 
@@ -595,7 +652,8 @@ const paymentSummary = (p) =>
   };
 
 app.get("/api/bookings/mine", requireAuth, route(async (req, res) => {
-  const [bookings, garages] = await Promise.all([repo.listBookingsByRenter(req.user.id), repo.listGarages()]);
+  // Deleted garages too: past tickets keep their garage's name
+  const [bookings, garages] = await Promise.all([repo.listBookingsByRenter(req.user.id), repo.listGarages({ includeDeleted: true })]);
   const ids = bookings.map((b) => b.id);
   const [pays, reviews] = await Promise.all([repo.listPaymentsForBookings(ids), repo.listReviewsForBookings(ids)]);
   const byId = new Map(garages.map((g) => [g.id, G.publicGarage(g)]));
@@ -661,6 +719,32 @@ app.post("/api/bookings/:id/cancel", requireAuth, route(async (req, res) => {
   res.json({ status: "cancelled", refund: refundedCents > 0, refunded_cents: refundedCents });
 }));
 
+// Renter leaves before the booking ends: it ends now and the rest of the time can be booked by
+// someone else. No refund: the time was paid for and held for them. After this the door no
+// longer opens for them.
+const MINUTE_MS = 60000;
+app.post("/api/bookings/:id/leave", requireAuth, route(async (req, res) => {
+  const booking = await repo.getBooking(req.params.id);
+  if (!booking) return res.status(404).json({ error: "Booking not found" });
+  if (booking.renter_id !== req.user.id) return res.status(403).json({ error: "This isn't your booking" });
+  if (booking.status !== "paid") return res.status(409).json({ error: "Only a paid booking can end early" });
+  const now = new Date();
+  if (new Date(booking.starts_at) > now) return res.status(409).json({ error: "This booking hasn't started yet. Cancel it instead." });
+  if (new Date(booking.ends_at) <= now) return res.status(409).json({ error: "This booking has already ended" });
+
+  // Whole minutes, so the next booking can start this same minute; never shorter than a minute
+  const endsAt = new Date(Math.max(Math.floor(now / MINUTE_MS) * MINUTE_MS, new Date(booking.starts_at).getTime() + MINUTE_MS));
+  const patch = { ends_at: endsAt.toISOString(), left_early_at: now.toISOString() };
+  let updated;
+  try {
+    updated = await repo.updateBooking(booking.id, patch);
+  } catch (e) {
+    if (!missingColumn(e)) throw e;
+    updated = await repo.updateBooking(booking.id, { ends_at: patch.ends_at }); // works before the SQL, minus the "left early" mark
+  }
+  res.json({ booking: updated });
+}));
+
 // ==========================================
 // Payments (mock by default: see payments/provider.js)
 // ==========================================
@@ -713,7 +797,7 @@ app.get("/api/payments/:id", requireAuth, route(async (req, res) => {
 
 // Host side: what the host earned from their garages (after the platform fee, refunds excluded)
 app.get("/api/host/earnings", requireAuth, route(async (req, res) => {
-  const garages = await repo.listGaragesByHost(req.user.id);
+  const garages = await repo.listGaragesByHost(req.user.id, { includeDeleted: true }); // deleted ones still earned
   const bookings = await repo.listBookingsForGarages(garages.map((g) => g.id));
   const pays = (await repo.listPaymentsForBookings(bookings.map((b) => b.id))).filter((p) => p.status === "succeeded");
   const bookingById = new Map(bookings.map((b) => [b.id, b]));

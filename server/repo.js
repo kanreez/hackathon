@@ -105,27 +105,36 @@ function createRepo(supabase) {
   };
 
   // ---------- garages ----------
-  async function listGarages() {
-    if (await hasTable("garages")) return must(await supabase.from("garages").select("*").order("created_at"));
-    return [...mem.garages];
+  // A deleted garage keeps its row (renters' past tickets and the host's earnings still name it)
+  // but is gone everywhere else. Filtered here rather than in SQL so the server keeps working
+  // before supabase/garage-visibility.sql adds the column.
+  const live = (rows, { includeDeleted = false } = {}) => (includeDeleted ? rows : rows.filter((g) => !g.deleted_at));
+
+  async function listGarages(opts) {
+    if (await hasTable("garages")) return live(must(await supabase.from("garages").select("*").order("created_at")), opts);
+    return live([...mem.garages], opts);
   }
 
   async function getGarage(id) {
-    if (await hasTable("garages")) return must(await supabase.from("garages").select("*").eq("id", id).maybeSingle());
-    return mem.garages.find((g) => g.id === id) ?? null;
+    const garage = (await hasTable("garages"))
+      ? must(await supabase.from("garages").select("*").eq("id", id).maybeSingle())
+      : mem.garages.find((g) => g.id === id);
+    return garage && !garage.deleted_at ? garage : null;
   }
 
   async function getGarageByDeviceKey(key) {
     if (!key) return null;
-    if (await hasTable("garages")) return must(await supabase.from("garages").select("*").eq("device_key", key).maybeSingle());
-    return mem.garages.find((g) => g.device_key === key) ?? null;
+    const garage = (await hasTable("garages"))
+      ? must(await supabase.from("garages").select("*").eq("device_key", key).maybeSingle())
+      : mem.garages.find((g) => g.device_key === key);
+    return garage && !garage.deleted_at ? garage : null;
   }
 
-  async function listGaragesByHost(hostId) {
+  async function listGaragesByHost(hostId, opts) {
     if (await hasTable("garages")) {
-      return must(await supabase.from("garages").select("*").eq("host_id", hostId).order("created_at"));
+      return live(must(await supabase.from("garages").select("*").eq("host_id", hostId).order("created_at")), opts);
     }
-    return mem.garages.filter((g) => g.host_id === hostId);
+    return live(mem.garages.filter((g) => g.host_id === hostId), opts);
   }
 
   async function createGarage(fields) {
@@ -136,7 +145,12 @@ function createRepo(supabase) {
     return garage;
   }
 
-  // The caller checks the host owns it; device_key and host_id are never changed here
+  // Marks it deleted and gives it a new device key, so the old ESP32 can't reach it any more
+  async function deleteGarage(id) {
+    return updateGarage(id, { hidden: true, deleted_at: new Date().toISOString(), device_key: `deleted-${newDeviceKey()}` });
+  }
+
+  // The caller checks the host owns it; host_id is never changed here
   async function updateGarage(id, fields) {
     if (await hasTable("garages")) return must(await supabase.from("garages").update(fields).eq("id", id).select("*").single());
     const garage = mem.garages.find((g) => g.id === id);
@@ -395,6 +409,7 @@ function createRepo(supabase) {
     listGaragesByHost,
     createGarage,
     updateGarage,
+    deleteGarage,
     expireStaleBookings,
     listBookingsForGarage,
     listAllLiveBookings,

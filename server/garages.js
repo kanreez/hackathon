@@ -56,7 +56,8 @@ function isAvailable(garage, start, end) {
   const windows = garage.availability;
   if (!windows) return true;
   const endMs = new Date(end).getTime();
-  for (let t = new Date(start).getTime(); t < endMs; t += HOUR_MS) {
+  // From the top of the start's hour, so 14:30-16:30 checks 16:00 too (Sofia is a whole-hour offset)
+  for (let t = Math.floor(new Date(start).getTime() / HOUR_MS) * HOUR_MS; t < endMs; t += HOUR_MS) {
     const parts = Object.fromEntries(sofiaClock.formatToParts(new Date(t)).map((p) => [p.type, p.value]));
     const day = WEEKDAY_INDEX[parts.weekday];
     const hour = Number(parts.hour);
