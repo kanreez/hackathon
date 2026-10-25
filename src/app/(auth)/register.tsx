@@ -57,6 +57,8 @@ export default function Register() {
           label="Password"
           placeholder="At least 6 characters"
           secureTextEntry
+          autoCapitalize="none"
+          autoCorrect={false}
           autoComplete="new-password"
           value={password}
           onChangeText={setPassword}

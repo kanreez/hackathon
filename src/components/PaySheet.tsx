@@ -224,6 +224,8 @@ export function PaySheet({ checkout, title, range, breakdown, onPaid, onClose, o
                       keyboardType="number-pad"
                       autoComplete="cc-csc"
                       secureTextEntry
+                      autoCapitalize="none"
+                      autoCorrect={false}
                       maxLength={4}
                       value={cvc}
                       onChangeText={(t) => setCvc(digitsOf(t))}

@@ -50,6 +50,8 @@ export default function Login() {
           label="Password"
           placeholder="Your password"
           secureTextEntry
+          autoCapitalize="none"
+          autoCorrect={false}
           autoComplete="password"
           value={password}
           onChangeText={setPassword}
