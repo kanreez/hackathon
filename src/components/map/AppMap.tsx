@@ -6,7 +6,7 @@ import { AppMapProps, DEFAULT_ZOOM } from "./types";
 
 // Phone map (react-native-maps: Apple Maps on iOS, Google Maps on Android, works in Expo Go).
 // The browser gets AppMap.web.tsx instead, since react-native-maps has no web support.
-export function AppMap({ center, zoom = DEFAULT_ZOOM, pins = [], selectedId, onSelectPin, picked, onPick, fitToPins, interactive = true, style }: AppMapProps) {
+export function AppMap({ center, zoom = DEFAULT_ZOOM, recenterKey, pins = [], selectedId, onSelectPin, picked, onPick, fitToPins, interactive = true, style }: AppMapProps) {
   const ref = useRef<MapView>(null);
   // Roughly the span a web zoom level shows, so both platforms frame the same area
   const delta = 360 / 2 ** zoom;
@@ -31,7 +31,7 @@ export function AppMap({ center, zoom = DEFAULT_ZOOM, pins = [], selectedId, onS
     frame();
     // fitKey stands in for the pins array, which is new on every render
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [center.latitude, center.longitude, delta, fitKey]);
+  }, [center.latitude, center.longitude, delta, fitKey, recenterKey]);
 
   return (
     <View style={[styles.wrap, style]}>

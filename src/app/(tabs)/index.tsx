@@ -16,7 +16,7 @@ import { ScreenWrapper } from "../../components/ScreenWrapper";
 import { EmptyState, ErrorState, Loading } from "../../components/StateViews";
 import { StepTracker } from "../../components/StepTracker";
 import { notify } from "../../components/Toast";
-import { AREA_CENTERS, areaLabel, exampleQueries, SIZE_META } from "../../constants/garages";
+import { AREA_CENTERS, areaLabel, cityLabel, exampleQueries, SIZE_META } from "../../constants/garages";
 import { colors, radius, spacing, typography } from "../../constants/theme";
 import { useAsync } from "../../hooks/useAsync";
 import { useIsWide } from "../../hooks/useIsWide";
@@ -253,6 +253,7 @@ function Understood({ result, onClear }: { result: SearchResult; onClear: () => 
   const { t } = useT();
   const f = result.filters;
   const chips = [
+    f.city ? { label: cityLabel(f.city) } : null,
     f.area ? { label: areaLabel(f.area) } : null,
     result.from_utc && result.to_utc ? { label: formatRange(result.from_utc, result.to_utc) } : null,
     f.vehicle_size ? { label: t("find.fits", { what: SIZE_META[f.vehicle_size].fits }) } : null,

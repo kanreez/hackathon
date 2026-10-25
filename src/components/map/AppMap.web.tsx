@@ -37,7 +37,7 @@ function escapeHtml(s: string) {
   return s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 }
 
-export function AppMap({ center, zoom = DEFAULT_ZOOM, pins = [], selectedId, onSelectPin, picked, onPick, fitToPins, interactive = true, style }: AppMapProps) {
+export function AppMap({ center, zoom = DEFAULT_ZOOM, recenterKey, pins = [], selectedId, onSelectPin, picked, onPick, fitToPins, interactive = true, style }: AppMapProps) {
   return (
     <View style={[styles.wrap, style]}>
       <MapContainer
@@ -56,7 +56,7 @@ export function AppMap({ center, zoom = DEFAULT_ZOOM, pins = [], selectedId, onS
         attributionControl
       >
         <TileLayer url={TILES} attribution={ATTRIBUTION} maxZoom={19} />
-        <Recenter center={center} zoom={zoom} fitTo={fitToPins && pins.length > 1 ? pins : null} />
+        <Recenter center={center} zoom={zoom} recenterKey={recenterKey} fitTo={fitToPins && pins.length > 1 ? pins : null} />
         {onPick ? <PickOnClick onPick={onPick} /> : null}
         {pins.map((p) => (
           <PricePin key={p.id} pin={p} selected={p.id === selectedId} onSelect={onSelectPin} />
@@ -69,7 +69,7 @@ export function AppMap({ center, zoom = DEFAULT_ZOOM, pins = [], selectedId, onS
 
 // Moves the map when `center` changes (e.g. "Use my location" or a new search), or frames
 // all of `fitTo` when given
-function Recenter({ center, zoom, fitTo }: { center: Coords; zoom: number; fitTo: MapPin[] | null }) {
+function Recenter({ center, zoom, recenterKey, fitTo }: { center: Coords; zoom: number; recenterKey?: number; fitTo: MapPin[] | null }) {
   const map = useMap();
   const fitKey = fitTo?.map((p) => `${p.latitude},${p.longitude}`).join("|") ?? "";
   useEffect(() => {
@@ -87,7 +87,7 @@ function Recenter({ center, zoom, fitTo }: { center: Coords; zoom: number; fitTo
     return () => observer.disconnect();
     // fitKey stands in for fitTo, which is a new array on every render
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [map, center.latitude, center.longitude, zoom, fitKey]);
+  }, [map, center.latitude, center.longitude, zoom, fitKey, recenterKey]);
   return null;
 }
 

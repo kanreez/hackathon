@@ -15,7 +15,7 @@ import { Stars } from "../../components/Stars";
 import { ErrorState, Loading } from "../../components/StateViews";
 import { StepTracker } from "../../components/StepTracker";
 import { notify } from "../../components/Toast";
-import { areaLabel, SIZE_META } from "../../constants/garages";
+import { placeLabel, SIZE_META } from "../../constants/garages";
 import { colors, radius, shadow, spacing, typography } from "../../constants/theme";
 import { useAsync } from "../../hooks/useAsync";
 import { useIsWide } from "../../hooks/useIsWide";
@@ -171,7 +171,7 @@ function BookForm({ garage, busy, reviews, from, to }: { garage: Garage; busy: B
     <>
       <View style={styles.hero}>
         <Text style={styles.heroTitle}>{garage.title}</Text>
-        <Text style={styles.heroBody}>{garage.address ? `${garage.address}, ${areaLabel(garage.area)}` : areaLabel(garage.area)}</Text>
+        <Text style={styles.heroBody}>{garage.address ? `${garage.address}, ${placeLabel(garage)}` : placeLabel(garage)}</Text>
         <View style={styles.access}>
           {app ? <View style={styles.bayLine} /> : null}
           <Text style={[styles.accessText, app && { color: colors.cta }]}>

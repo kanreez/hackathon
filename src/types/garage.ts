@@ -11,7 +11,8 @@ export type Garage = {
   id: string;
   host_id: string | null;
   title: string;
-  area: string;
+  city: string; // English name from CITIES (src/constants/garages.ts)
+  area: string; // a Sofia district from AREAS, or elsewhere the host's own district (or the city name)
   address: string | null;
   latitude: number | null;
   longitude: number | null;
@@ -47,6 +48,7 @@ export type Review = {
 export type GarageInput = Pick<
   Garage,
     | "title"
+  | "city"
   | "area"
   | "address"
   | "latitude"
@@ -134,6 +136,7 @@ export type Earnings = {
 
 // What the AI understood from the plain-language request
 export type SearchFilters = {
+  city: string | null;
   area: string | null;
   from: string | null; // local "YYYY-MM-DDTHH:mm"
   to: string | null;

@@ -7,7 +7,8 @@ export type MapPin = Coords & { id: string; label: string };
 // Shared by AppMap.tsx (phone, react-native-maps) and AppMap.web.tsx (PC / browser, Leaflet)
 export type AppMapProps = {
   center: Coords; // where the map looks; changing it moves the map there
-  zoom?: number; // 13 ≈ a few districts, 15 ≈ a few streets
+  zoom?: number; // 13 ≈ a whole city, 15 ≈ a few streets, 17 ≈ one street
+  recenterKey?: number; // changing it moves the map to center/zoom again, even if they're the same
   pins?: MapPin[];
   selectedId?: string | null;
   onSelectPin?: (id: string) => void;

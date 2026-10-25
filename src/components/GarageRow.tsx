@@ -1,5 +1,5 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { areaLabel, SIZE_META } from "../constants/garages";
+import { placeLabel, SIZE_META } from "../constants/garages";
 import { colors, spacing, typography } from "../constants/theme";
 import { t, useT } from "../i18n";
 import { Garage } from "../types/garage";
@@ -25,7 +25,7 @@ export function formatKm(km: number) {
 export function GarageRow({ garage: g, distanceKm, onPress }: Props) {
   useT(); // re-render in a new language
   const app = g.access === "app";
-  const where = distanceKm != null ? `${areaLabel(g.area)}, ${formatKm(distanceKm)}` : areaLabel(g.area);
+  const where = distanceKm != null ? `${placeLabel(g)}, ${formatKm(distanceKm)}` : placeLabel(g);
   const spec = `${SIZE_META[g.size].label}, ${(g.covered ? t("garage.covered") : t("garage.openAir")).toLowerCase()}`;
   const info = (
     <>

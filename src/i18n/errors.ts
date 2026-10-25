@@ -23,7 +23,9 @@ const EXACT: Record<string, TKey> = {
   "Garage not found": "err.garageNotFound",
   "This garage isn't taking bookings right now": "err.garageHidden",
   "This garage still has bookings that haven't ended. Hide it now and delete it after the last one.": "err.deleteHasBookings",
-  "The database needs an update first: run supabase/garage-visibility.sql in Supabase": "err.needsMigration",
+  "city must be one of the listed cities": "err.cityUnknown",
+  "location must be in Bulgaria": "err.notInBulgaria",
+  "Type 3 to 160 characters of the address": "err.addressLength",
   "Only a paid booking can end early": "err.leaveNotPaid",
   "This booking hasn't started yet. Cancel it instead.": "err.leaveNotStarted",
   "This booking has already ended": "err.leaveEnded",
@@ -62,6 +64,7 @@ const PATTERNS: [RegExp, (m: RegExpMatchArray) => string][] = [
   [/^Bookings can be at most (\d+) days$/, (m) => t("err.maxDays", { n: m[1] })],
   [/^Keep the comment under (\d+) characters$/, (m) => t("err.commentLong", { n: m[1] })],
   [/^Request failed \((\d+)\)$/, (m) => t("err.requestFailed", { code: m[1] })],
+  [/^The database needs an update first: run supabase\/([\w.-]+) in Supabase$/, (m) => t("err.needsMigration", { file: m[1] })],
 ];
 
 export function translateError(message: string): string {
