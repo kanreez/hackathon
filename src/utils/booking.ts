@@ -15,6 +15,8 @@ export const toLocalIso = (d: Date) =>
 export const startOfHour = (d: Date) =>
   new Date(d.getTime() - (d.getMinutes() * 60000 + d.getSeconds() * 1000 + d.getMilliseconds()));
 
+export const startOfMinute = (d: Date) => new Date(d.getTime() - (d.getSeconds() * 1000 + d.getMilliseconds()));
+
 export const startOfDay = (d: Date) => {
   const x = new Date(d);
   x.setHours(0, 0, 0, 0);

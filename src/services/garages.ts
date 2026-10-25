@@ -39,6 +39,16 @@ export async function updateGarage(id: string, input: GarageInput) {
   return (await api.patch<{ garage: Garage }>(`/api/garages/${id}`, input)).garage;
 }
 
+// Host only. Hidden = off search and no new bookings; bookings already made keep working.
+export async function setGarageHidden(id: string, hidden: boolean) {
+  return (await api.put<{ garage: Garage }>(`/api/garages/${id}/visibility`, { hidden })).garage;
+}
+
+// Host only, permanent. The server refuses while the garage has bookings that haven't ended.
+export async function deleteGarage(id: string) {
+  await api.delete<{ deleted: true }>(`/api/garages/${id}`);
+}
+
 // Creates the booking unpaid (it holds the slot for 10 minutes) and its payment. The server
 // sets the price; pay with confirmPayment() from services/payments.ts.
 export async function createBooking(garageId: string, startsAt: Date, endsAt: Date, mode: BookingMode) {
@@ -48,6 +58,11 @@ export async function createBooking(garageId: string, startsAt: Date, endsAt: Da
     ends_at: endsAt.toISOString(),
     mode,
   });
+}
+
+// Ends a booking that's under way now, so the rest of the time frees up. No refund.
+export async function leaveEarly(bookingId: string) {
+  return (await api.post<{ booking: Booking }>(`/api/bookings/${bookingId}/leave`)).booking;
 }
 
 export async function myBookings() {

@@ -37,6 +37,7 @@ import {
   priceFor,
   startOfDay,
   startOfHour,
+  startOfMinute,
 } from "../../utils/booking";
 import { isAvailable, summarizeAvailability } from "../../utils/availability";
 import { openDirections } from "../../utils/maps";
@@ -112,6 +113,8 @@ function BookForm({ garage, busy, reviews, from, to }: { garage: Garage; busy: B
 
   const now = new Date();
   const minStart = startOfHour(now);
+  // The current hour starts now, to the minute: someone may have just left early
+  const nowMinute = startOfMinute(now);
   const isToday = startOfDay(now).getTime() === day.getTime();
   const firstHour = isToday ? minStart.getHours() : 0;
   const hour = Math.max(startHour, firstHour); // a day change can leave the old hour in the past
@@ -121,9 +124,10 @@ function BookForm({ garage, busy, reviews, from, to }: { garage: Garage; busy: B
   if (mode === "hour") {
     start = new Date(day);
     start.setHours(hour);
+    if (isToday && hour === firstHour) start = nowMinute;
     end = addHours(start, hours);
   } else {
-    start = isToday ? minStart : day; // today's day booking starts now, not at midnight
+    start = isToday ? nowMinute : day; // today's day booking starts now, not at midnight
     end = addDays(day, days);
   }
   const total = priceFor(garage, start, end, mode);
@@ -261,7 +265,12 @@ function BookForm({ garage, busy, reviews, from, to }: { garage: Garage; busy: B
         <Text style={styles.total}>{formatMoney(total)}</Text>
       </View>
 
-      {clash ? (
+      {garage.hidden ? (
+        <View style={styles.clash} accessibilityRole="alert">
+          <Ionicons name="eye-off" size={18} color={colors.errorText} />
+          <Text style={styles.clashText}>{t("book.hidden")}</Text>
+        </View>
+      ) : clash ? (
         <View style={styles.clash} accessibilityRole="alert">
           <Ionicons name="alert-circle" size={18} color={colors.errorText} />
           <Text style={styles.clashText}>{t("book.clash", { range: formatRange(clash.starts_at, clash.ends_at) })}</Text>
@@ -280,7 +289,7 @@ function BookForm({ garage, busy, reviews, from, to }: { garage: Garage; busy: B
         icon="checkmark"
         variant="accent"
         loading={saving}
-        disabled={!!clash || outsideHours}
+        disabled={!!garage.hidden || !!clash || outsideHours}
         onPress={confirm}
         style={{ marginTop: spacing.lg }}
       />

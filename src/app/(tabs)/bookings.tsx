@@ -15,7 +15,7 @@ import { useAsync } from "../../hooks/useAsync";
 import { useRefreshOnFocus } from "../../hooks/useRefreshOnFocus";
 import { t, useT } from "../../i18n";
 import { translateError } from "../../i18n/errors";
-import { getCommand, myBookings, sendDoorCommand } from "../../services/garages";
+import { getCommand, leaveEarly, myBookings, sendDoorCommand } from "../../services/garages";
 import { cancelBooking } from "../../services/payments";
 import { Booking, DoorAction } from "../../types/garage";
 import { formatCents, formatDay, formatDuration, formatTime } from "../../utils/booking";
@@ -64,7 +64,7 @@ export default function Bookings() {
       ) : (
         <>
           {active.map((b) => (
-            <ActiveBooking key={b.id} booking={b} now={now} onReviewed={refresh} />
+            <ActiveBooking key={b.id} booking={b} now={now} onChanged={refresh} />
           ))}
 
           {upcoming.length ? (
@@ -102,7 +102,7 @@ type Door =
   | { phase: "done"; action: DoorAction; at: Date }
   | { phase: "error"; message: string };
 
-function ActiveBooking({ booking, now, onReviewed }: { booking: Booking; now: Date; onReviewed: () => void }) {
+function ActiveBooking({ booking, now, onChanged }: { booking: Booking; now: Date; onChanged: () => void }) {
   useT();
   const g = booking.garage;
   const [door, setDoor] = useState<Door>({ phase: "idle" });
@@ -195,8 +195,45 @@ function ActiveBooking({ booking, now, onReviewed }: { booking: Booking; now: Da
       <Text style={styles.paidLine}>
         {t("bookings.paidWith", { amount: formatCents(amountOf(booking)), method: paidWith(booking) })}
       </Text>
-      <ReviewBox booking={booking} onSaved={onReviewed} />
+      <ReviewBox booking={booking} onSaved={onChanged} />
+      <LeaveEarly booking={booking} doorOpen={app && isOpen} onLeft={onChanged} />
     </Card>
+  );
+}
+
+// Ends the booking now so the rest of the time frees up for others. No refund.
+function LeaveEarly({ booking, doorOpen, onLeft }: { booking: Booking; doorOpen: boolean; onLeft: () => void }) {
+  useT();
+  const [confirming, setConfirming] = useState(false);
+  const [leaving, setLeaving] = useState(false);
+
+  const leave = async () => {
+    try {
+      setLeaving(true);
+      await leaveEarly(booking.id);
+      notify(t("bookings.leftDone"));
+      onLeft();
+    } catch (e: any) {
+      notify(e.message, "error");
+      setLeaving(false);
+      setConfirming(false);
+    }
+  };
+
+  if (!confirming) {
+    return <Button title={t("bookings.leave")} icon="exit-outline" size="sm" variant="ghost" onPress={() => setConfirming(true)} style={styles.cancelBtn} />;
+  }
+  return (
+    <View style={styles.leave}>
+      <Text style={styles.body}>{t("bookings.leaveConfirm")}</Text>
+      {booking.garage?.access === "app" ? (
+        <Text style={[styles.caption, doorOpen && { color: colors.errorText }]}>{t("bookings.leaveDoor")}</Text>
+      ) : null}
+      <View style={styles.leaveActions}>
+        <Button title={t("bookings.stay")} size="sm" variant="ghost" disabled={leaving} onPress={() => setConfirming(false)} />
+        <Button title={t("bookings.leaveYes")} size="sm" variant="danger" loading={leaving} onPress={leave} />
+      </View>
+    </View>
   );
 }
 
@@ -251,6 +288,7 @@ function BookingRow({ booking, now, note, muted, onChanged, onReviewed }: RowPro
 
   const inAt = new Date(booking.starts_at);
   const outAt = new Date(booking.ends_at);
+  const shown = note ?? (booking.left_early_at ? t("bookings.leftEarly", { time: formatTime(new Date(booking.left_early_at)) }) : undefined);
 
   // A parking ticket: In and Out times on top, a tear line, then what it is and what it cost
   return (
@@ -273,7 +311,7 @@ function BookingRow({ booking, now, note, muted, onChanged, onReviewed }: RowPro
               <Text style={styles.caption}>{paidWith(booking)}</Text>
             ) : null}
           </View>
-          {note ? <Text style={styles.note}>{note}</Text> : null}
+          {shown ? <Text style={styles.note}>{shown}</Text> : null}
         </View>
         <Text style={[styles.price, booking.status === "cancelled" && styles.struck]}>{formatCents(amount)}</Text>
       </View>
@@ -355,5 +393,7 @@ const styles = StyleSheet.create({
   paidLine: { ...typography.label, color: colors.success },
   confirmRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm, flexWrap: "wrap" },
   cancelBtn: { alignSelf: "flex-start" },
+  leave: { gap: spacing.sm, padding: spacing.md, borderRadius: radius.md, backgroundColor: colors.errorSoft },
+  leaveActions: { flexDirection: "row", justifyContent: "flex-end", gap: spacing.sm },
   dim: { opacity: 0.7 },
 });

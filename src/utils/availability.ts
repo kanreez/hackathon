@@ -1,6 +1,6 @@
 import { t } from "../i18n";
 import { AvailabilityWindow, Garage } from "../types/garage";
-import { HOUR_MS } from "./booking";
+import { HOUR_MS, startOfHour } from "./booking";
 
 // Monday first, as people read a week; values are Date#getDay() numbers
 export const WEEK = [1, 2, 3, 4, 5, 6, 0] as const;
@@ -17,7 +17,8 @@ const windowLabel = (w: AvailabilityWindow) => (w.start === 0 && w.end === 24 ? 
 export function isAvailable(garage: Pick<Garage, "availability">, start: Date, end: Date) {
   const windows = garage.availability;
   if (!windows) return true;
-  for (let t = start.getTime(); t < end.getTime(); t += HOUR_MS) {
+  // From the top of the start's hour, so 14:30-16:30 checks 16:00 too
+  for (let t = startOfHour(start).getTime(); t < end.getTime(); t += HOUR_MS) {
     const d = new Date(t);
     const day = d.getDay();
     const hour = d.getHours();

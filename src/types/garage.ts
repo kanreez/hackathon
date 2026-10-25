@@ -24,6 +24,7 @@ export type Garage = {
   description: string | null;
   availability: AvailabilityWindow[] | null; // null = free any time
   created_at: string;
+  hidden?: boolean; // the host took it off search: no new bookings, existing ones still work
   // Only on the host's own garages
   device_key?: string;
   device_last_seen?: string | null;
@@ -76,6 +77,7 @@ export type Booking = {
   amount_cents: number | null;
   status: BookingStatus;
   expires_at: string | null;
+  left_early_at?: string | null; // the renter left early: ends_at was moved to that minute
   created_at: string;
   garage: Garage | null;
   payment: PaymentSummary | null;
