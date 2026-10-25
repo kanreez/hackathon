@@ -1,4 +1,4 @@
-// Claude (Anthropic) provider for /api/ai and the plain-language garage search
+// Claude (Anthropic) provider for the plain-language garage search (first in the fallback chain)
 const Anthropic = require("@anthropic-ai/sdk");
 
 const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || "claude-haiku-5-5";
@@ -21,7 +21,8 @@ function toJsonSchema(node) {
 
 const anthropic = process.env.ANTHROPIC_API_KEY ? new Anthropic() : null;
 
-async function askAnthropic({ prompt, system, json, image, schema }) {
+// timeoutMs: give up quickly so the server can fall back to the next provider
+async function askAnthropic({ prompt, system, json, image, schema, maxTokens = 1024, timeoutMs = 15000 }) {
   if (!anthropic) throw new Error("ANTHROPIC_API_KEY is missing in server/.env");
   const content = [
     ...(image ? [{ type: "image", source: { type: "base64", media_type: image.mimeType, data: image.data } }] : []),
@@ -30,14 +31,16 @@ async function askAnthropic({ prompt, system, json, image, schema }) {
   try {
     const response = await anthropic.messages.create({
       model: ANTHROPIC_MODEL,
-      max_tokens: 16000,
+      max_tokens: maxTokens,
       ...(system || (json && !schema)
         ? { system: [system, json && !schema ? "Respond only with valid JSON." : ""].filter(Boolean).join(" ") }
         : {}),
       messages: [{ role: "user", content }],
       ...(schema ? { output_config: { format: { type: "json_schema", schema: toJsonSchema(schema) } } } : {}),
-    });
-    if (response.stop_reason === "refusal") return { status: 422, error: "The AI declined this request. Try rephrasing it." };
+    }, { timeout: timeoutMs, maxRetries: 1 });
+    // A refusal is an answer ("not something to search for"), not a failure to fall back from
+    if (response.stop_reason === "refusal") return { refused: true };
+    if (response.stop_reason === "max_tokens") return { status: 502, error: "Answer was cut off" };
     const text = response.content.filter((b) => b.type === "text").map((b) => b.text).join("");
     return { reply: text };
   } catch (err) {

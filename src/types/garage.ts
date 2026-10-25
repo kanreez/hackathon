@@ -145,6 +145,9 @@ export type SearchResult = {
   to_utc: string | null;
   center: { latitude: number; longitude: number } | null;
   garages: Garage[];
+  // Set when the request wasn't about garages, parking or cars; hint is a fixed suggestion
+  off_topic?: boolean;
+  hint?: string;
 };
 
 export type DoorAction = "open" | "close";

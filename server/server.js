@@ -76,24 +76,32 @@ app.get("/api/me", requireAuth, async (req, res) => {
 });
 
 // ==========================================
-// AI endpoint: Anthropic (Claude), OpenAI (ChatGPT) or Google Gemini
+// AI: Claude, then Gemini Flash-Lite, then Gemini, then OpenAI, each only if its key is set
 // ==========================================
-// Pick the provider in server/.env:  AI_PROVIDER=anthropic, openai or gemini
-// Body: { prompt, system?, json? }
-//   system: optional instructions (role, tone, rules)
-//   json:   true -> the model must answer with valid JSON (reply is still a string; parse it in the app)
-const AI_PROVIDER = (process.env.AI_PROVIDER || (process.env.OPENAI_API_KEY ? "openai" : "gemini")).toLowerCase();
+// The app never talks to a model directly. The only AI feature is the garage search, and its
+// answer is always parsed and validated into filters before anything reaches the user, so a
+// prompt-injected model can't put its own text in front of anyone.
+const AI_PROVIDER = (process.env.AI_PROVIDER || "anthropic").toLowerCase(); // tried first
 const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-5.4-mini";
 const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-3.8-flash";
+// Fast and plenty for turning a request into filters; the full Flash models can take over 15 s
+// when busy. "gemini-flash-lite-latest" is an alias Google keeps pointing at the current Lite.
+const GEMINI_LITE_MODEL = process.env.GEMINI_LITE_MODEL || "gemini-flash-lite-latest";
 // Optional second Gemini model, tried when the main one is overloaded
 const GEMINI_FALLBACK_MODEL = process.env.GEMINI_FALLBACK_MODEL;
-const MODEL_BY_PROVIDER = { anthropic: process.env.ANTHROPIC_MODEL || "claude-haiku-5-5", openai: OPENAI_MODEL, gemini: GEMINI_MODEL };
-console.log(`AI provider: ${AI_PROVIDER} (${MODEL_BY_PROVIDER[AI_PROVIDER]})`);
+const MODEL_BY_PROVIDER = {
+  anthropic: process.env.ANTHROPIC_MODEL || "claude-haiku-5-5",
+  "gemini-lite": GEMINI_LITE_MODEL,
+  gemini: GEMINI_MODEL,
+  openai: OPENAI_MODEL,
+};
+const KEY_BY_PROVIDER = { anthropic: "ANTHROPIC_API_KEY", "gemini-lite": "GEMINI_API_KEY", gemini: "GEMINI_API_KEY", openai: "OPENAI_API_KEY" };
+const AI_TIMEOUT_MS = 15000; // per provider, so a hanging one falls through to the next quickly
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const isTemporary = (status) => status === 503 || status === 429 || status === 502;
 
-// Calls fn up to 3 times while the provider says it's busy
+// Calls fn again while the provider says it's busy
 async function withRetries(attempts, fn) {
   let result;
   for (const { arg, wait } of attempts) {
@@ -114,7 +122,7 @@ async function askOpenAI({ prompt, system, json, schema }) {
     { role: "user", content: prompt },
   ];
   const r = await withRetries(
-    [{ arg: OPENAI_MODEL, wait: 0 }, { arg: OPENAI_MODEL, wait: 1000 }, { arg: OPENAI_MODEL, wait: 2500 }],
+    [{ arg: OPENAI_MODEL, wait: 0 }, { arg: OPENAI_MODEL, wait: 800 }],
     async (model) => {
       const response = await fetch("https://api.openai.com/v1/chat/completions", {
         method: "POST",
@@ -124,15 +132,18 @@ async function askOpenAI({ prompt, system, json, schema }) {
           messages,
           ...(json ? { response_format: { type: "json_object" } } : {}),
         }),
+        signal: AbortSignal.timeout(AI_TIMEOUT_MS),
       });
       return { status: response.status, ok: response.ok, data: await response.json() };
     }
   );
   if (!r.ok) return { status: r.status, error: r.data.error?.message || "AI request failed" };
-  return { reply: r.data.choices?.[0]?.message?.content || "" };
+  const message = r.data.choices?.[0]?.message;
+  if (message?.refusal) return { refused: true };
+  return { reply: message?.content || "" };
 }
 
-async function askGemini({ prompt, system, json, schema }) {
+async function askGemini({ prompt, system, json, schema, model: mainModel = GEMINI_MODEL }) {
   if (!process.env.GEMINI_API_KEY) throw new Error("GEMINI_API_KEY is missing in server/.env");
   const body = {
     contents: [{ parts: [{ text: prompt }] }],
@@ -143,25 +154,68 @@ async function askGemini({ prompt, system, json, schema }) {
   };
   const r = await withRetries(
     [
-      { arg: GEMINI_MODEL, wait: 0 },
-      { arg: GEMINI_MODEL, wait: 1000 },
-      { arg: GEMINI_MODEL, wait: 2500 },
-      ...(GEMINI_FALLBACK_MODEL ? [{ arg: GEMINI_FALLBACK_MODEL, wait: 0 }] : []),
+      { arg: mainModel, wait: 0 },
+      { arg: mainModel, wait: 800 },
+      ...(GEMINI_FALLBACK_MODEL && mainModel === GEMINI_MODEL ? [{ arg: GEMINI_FALLBACK_MODEL, wait: 0 }] : []),
     ],
     async (model) => {
       const response = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`,
-        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal: AbortSignal.timeout(AI_TIMEOUT_MS) }
       );
       return { status: response.status, ok: response.ok, data: await response.json() };
     }
   );
   if (!r.ok) return { status: r.status, error: r.data.error?.message || "AI request failed" };
-  return { reply: r.data.candidates?.[0]?.content?.parts?.[0]?.text || "" };
+  // Blocked by Gemini's safety filters: an answer ("not something to search for"), not a failure
+  const candidate = r.data.candidates?.[0];
+  if (r.data.promptFeedback?.blockReason || candidate?.finishReason === "SAFETY") return { refused: true };
+  return { reply: candidate?.content?.parts?.[0]?.text || "" };
 }
 
-const PROVIDERS = { anthropic: askAnthropic, openai: askOpenAI, gemini: askGemini };
-const ask = (opts) => (PROVIDERS[AI_PROVIDER] || askGemini)(opts);
+const PROVIDERS = {
+  anthropic: askAnthropic,
+  "gemini-lite": (opts) => askGemini({ ...opts, model: GEMINI_LITE_MODEL }),
+  gemini: askGemini,
+  openai: askOpenAI,
+};
+// AI_PROVIDER first, then the rest in this order; providers without a key are skipped
+const AI_CHAIN = [AI_PROVIDER, "anthropic", "gemini-lite", "gemini", "openai"]
+  .filter((p, i, all) => PROVIDERS[p] && all.indexOf(p) === i)
+  .filter((p) => process.env[KEY_BY_PROVIDER[p]]);
+console.log(
+  AI_CHAIN.length
+    ? `AI: ${AI_CHAIN.map((p) => `${p} (${MODEL_BY_PROVIDER[p]})`).join(" -> ")}`
+    : "AI: no provider has a key. Add ANTHROPIC_API_KEY, GEMINI_API_KEY or OPENAI_API_KEY to server/.env."
+);
+
+// Asks each provider in turn until one gives an answer that `accept` turns into a value
+// (accept returns undefined for an unusable answer, which moves on to the next provider).
+// Returns { value, provider } | { refused: true, provider } | { error }.
+async function askWithFallback(opts, accept) {
+  const failures = [];
+  for (const name of AI_CHAIN) {
+    try {
+      const r = await PROVIDERS[name](opts);
+      if (r.refused) return { refused: true, provider: name };
+      if (r.error) {
+        failures.push(`${name}: ${r.error}`);
+        continue;
+      }
+      const value = accept(r.reply);
+      if (value === undefined) {
+        failures.push(`${name}: answer didn't pass validation`);
+        continue;
+      }
+      if (failures.length) console.warn(`AI: answered by ${name} after ${failures.join("; ")}`);
+      return { value, provider: name };
+    } catch (err) {
+      failures.push(`${name}: ${err.name === "TimeoutError" ? "timed out" : err.message}`);
+    }
+  }
+  console.warn(`AI: no provider could answer (${failures.join("; ") || "none configured"})`);
+  return { error: "Search is unavailable right now. Try again in a moment." };
+}
 
 const parseJson = (text) => {
   try {
@@ -170,19 +224,6 @@ const parseJson = (text) => {
     return null;
   }
 };
-
-app.post("/api/ai", requireAuth, async (req, res) => {
-  const { prompt, system, json } = req.body;
-  if (!prompt) return res.status(400).json({ error: "Missing prompt" });
-
-  try {
-    const result = await ask({ prompt, system, json });
-    if (result.error) return res.status(result.status).json({ error: result.error });
-    res.json({ reply: result.reply });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
 
 // ==========================================
 // Garages
@@ -305,7 +346,7 @@ app.patch("/api/garages/:id", requireAuth, route(async (req, res) => {
 const searchCache = new Map(); // same question in the same hour -> same filters, no second AI call
 
 app.post("/api/garages/search", requireAuth, route(async (req, res) => {
-  const query = String(req.body?.query ?? "").trim();
+  const query = G.sanitizeQuery(req.body?.query);
   const nowLocal = String(req.body?.now_local ?? "");
   const tzOffset = Number(req.body?.tz_offset ?? 0);
   const timeZone = typeof req.body?.time_zone === "string" ? req.body.time_zone : null;
@@ -315,16 +356,19 @@ app.post("/api/garages/search", requireAuth, route(async (req, res) => {
   const cacheKey = `${query.toLowerCase()}|${nowLocal.slice(0, 13)}`;
   let filters = searchCache.get(cacheKey);
   if (!filters) {
-    const result = await ask({
-      prompt: G.buildSearchPrompt(query, nowLocal),
-      system: G.SEARCH_SYSTEM,
-      json: true,
-      schema: G.SEARCH_SCHEMA,
-    });
-    if (result.error) return res.status(result.status).json({ error: result.error });
-    filters = parseJson(result.reply);
-    if (!filters) return res.status(502).json({ error: "The AI returned an unreadable answer. Try rephrasing." });
+    const result = await askWithFallback(
+      { prompt: G.buildSearchPrompt(query, nowLocal), system: G.SEARCH_SYSTEM, json: true, schema: G.SEARCH_SCHEMA },
+      (reply) => G.cleanFilters(parseJson(reply))
+    );
+    if (result.error) return res.status(503).json({ error: result.error });
+    // A model refusing the request means it isn't a garage search either
+    filters = result.refused ? G.cleanFilters({ on_topic: false }) : result.value;
     searchCache.set(cacheKey, filters);
+  }
+
+  // Not about garages, parking or cars: no AI text, just the same fixed hint every time
+  if (!filters.on_topic) {
+    return res.json({ off_topic: true, hint: G.OFF_TOPIC_HINT, filters, from_utc: null, to_utc: null, center: null, garages: [] });
   }
 
   let fromUtc = G.localToUtc(filters.from, tzOffset, timeZone);

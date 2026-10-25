@@ -1,3 +1,4 @@
+import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import { Platform, Pressable, StyleSheet, Text, View, ViewStyle } from "react-native";
@@ -29,6 +30,7 @@ export default function Find() {
   const [query, setQuery] = useState("");
   const [searching, setSearching] = useState(false);
   const [result, setResult] = useState<SearchResult | null>(null);
+  const [hint, setHint] = useState<string | null>(null);
   const [me, setMe] = useState<Coords | null>(null);
   const wide = useIsWide();
   const [view, setView] = useState<"list" | "map">("list");
@@ -46,7 +48,15 @@ export default function Find() {
     setQuery(q);
     try {
       setSearching(true);
-      setResult(await searchGarages(q));
+      const r = await searchGarages(q);
+      // Not a garage search: keep the normal list and suggest something that is
+      if (r.off_topic) {
+        setResult(null);
+        setHint(r.hint ?? 'Try asking "garages near me!"');
+      } else {
+        setHint(null);
+        setResult(r);
+      }
     } catch (e: any) {
       notify(e.message, "error");
     } finally {
@@ -135,6 +145,13 @@ export default function Find() {
         />
       </Card>
 
+      {hint ? (
+        <View style={styles.hint} accessibilityLiveRegion="polite">
+          <Ionicons name="information-circle-outline" size={20} color={colors.textMuted} />
+          <Text style={styles.hintText}>{hint}</Text>
+          <Button title="Try it" size="sm" variant="ghost" loading={searching} onPress={() => search("garages near me")} />
+        </View>
+      ) : null}
       {result ? <Understood result={result} onClear={() => setResult(null)} /> : null}
     </>
   );
@@ -276,6 +293,8 @@ const styles = StyleSheet.create({
   },
   exampleText: { ...typography.caption, color: colors.ink },
   understood: { marginTop: spacing.lg, gap: spacing.sm },
+  hint: { flexDirection: "row", alignItems: "center", gap: spacing.sm, marginTop: spacing.md, paddingLeft: spacing.sm },
+  hintText: { ...typography.label, color: colors.ink, flex: 1 },
   understoodHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   clear: { ...typography.label, color: colors.accentDeep, textDecorationLine: "underline" },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
