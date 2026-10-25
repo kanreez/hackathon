@@ -14,7 +14,6 @@ import { ActivityIndicator, View } from "react-native";
 import { ToastProvider } from "../components/Toast";
 import { colors } from "../constants/theme";
 import { AuthProvider, useAuth } from "../context/AuthContext";
-import "../global.css";
 
 // Keep the splash screen up until the fonts are ready
 SplashScreen.preventAutoHideAsync().catch(() => {});
