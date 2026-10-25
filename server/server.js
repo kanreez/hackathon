@@ -1,3 +1,4 @@
+const fs = require("fs");
 const path = require("path");
 // Load server/.env no matter which folder the server is started from
 require("dotenv").config({ path: path.join(__dirname, ".env") });
@@ -82,7 +83,14 @@ async function requireDevice(req, res, next) {
 const route = (fn) => (req, res) =>
   fn(req, res).catch((err) => res.status(err instanceof PaymentError ? err.status : 500).json({ error: err.message }));
 
+// The web app, when it has been built (npx expo export --platform web -> dist/). On kuso one
+// service serves the app and this API from the same address; locally there's usually no dist/.
+const WEB_DIR = path.join(__dirname, "..", "dist");
+const hasWeb = fs.existsSync(path.join(WEB_DIR, "index.html"));
+if (hasWeb) app.use(express.static(WEB_DIR, { maxAge: "1h" }));
+
 app.get("/", (_req, res) => res.json({ status: "ok" }));
+app.get("/api/health", (_req, res) => res.json({ status: "ok" }));
 
 app.get("/api/me", requireAuth, async (req, res) => {
   const { data, error } = await supabase
@@ -966,6 +974,15 @@ app.post(PHOTO_PATH, requireAuth, photoBody, route(async (req, res) => {
   const url = await photoStore.save({ buffer, type, userId: req.user.id, baseUrl: `${req.protocol}://${req.get("host")}` });
   res.status(201).json({ url });
 }));
+
+// Any other page of the web app (/bookings, /garage/123...) is the same index.html: the app's
+// router takes it from there
+if (hasWeb) {
+  app.use((req, res, next) => {
+    if (req.method !== "GET" || req.path.startsWith("/api/") || req.path.startsWith("/uploads/")) return next();
+    res.sendFile(path.join(WEB_DIR, "index.html"));
+  });
+}
 
 // A body over the limit, or JSON that doesn't parse: answer in JSON like every other error
 app.use((err, _req, res, _next) => {
